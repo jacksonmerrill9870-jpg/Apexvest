@@ -1542,7 +1542,7 @@ button {
     display: flex;
     flex-direction: column;
     transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    padding: 24px;
+    padding: 24px 24px 48px 24px;
     overflow: hidden; /* Prevent scrolling the entire drawer container */
 }
 
