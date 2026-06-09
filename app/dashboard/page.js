@@ -501,7 +501,7 @@ export default function Dashboard() {
     localStorage.removeItem("premiumDuration");
     setIsLoggedIn(false);
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
-    router.push("/");
+    window.location.href = "/";
   };
 
   // Format countdown seconds to MM:SS

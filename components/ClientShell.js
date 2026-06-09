@@ -183,7 +183,7 @@ export default function ClientShell({ children }) {
     localStorage.removeItem("isLoggedIn");
     setIsLoggedIn(false);
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
-    router.push("/");
+    window.location.href = "/";
   };
 
   // Re-run Lucide icon builder on route changes
