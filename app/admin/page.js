@@ -24,6 +24,8 @@ export default function AdminDashboard() {
   const [wireBankName, setWireBankName] = useState("");
   const [wireRoutingNumber, setWireRoutingNumber] = useState("");
   const [wireAccountNumber, setWireAccountNumber] = useState("");
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
   
   const [planForm, setPlanForm] = useState({
     id: "", name: "", roi: "", duration: "",
@@ -46,6 +48,8 @@ export default function AdminDashboard() {
     try {
       const storedUsers = JSON.parse(localStorage.getItem("allUsers") || "[]");
       setUsers(storedUsers);
+      setTelegramBotToken(localStorage.getItem("telegramBotToken") || "");
+      setTelegramChatId(localStorage.getItem("telegramChatId") || "");
 
       const defaultPlans = [
         { id: "diamond", name: "Diamond Plan", roi: "20%", minDeposit: 500, depositType: "fixed", fixedAmount: 500, duration: "1 month" },
@@ -366,6 +370,7 @@ export default function AdminDashboard() {
             </a>
           </li>
           <li><a className={activeTab === "plans" ? "active" : ""} onClick={() => setActiveTab("plans")}><LucideIcon name="trending-up" /> Investment Plans</a></li>
+          <li><a className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}><LucideIcon name="settings" /> System Settings</a></li>
           <li><a href="/dashboard" style={{ marginTop: "auto", borderTop: "1px solid #1f2937", paddingTop: "20px" }}><LucideIcon name="log-out" /> Back to Dashboard</a></li>
         </ul>
       </aside>
@@ -377,6 +382,7 @@ export default function AdminDashboard() {
             {activeTab === "users" && "User Management"}
             {activeTab === "transactions" && "Pending Transactions"}
             {activeTab === "plans" && "Investment Plans"}
+            {activeTab === "settings" && "System Settings"}
           </h1>
         </div>
         {/* Users Tab - card per user */}
@@ -583,6 +589,46 @@ export default function AdminDashboard() {
               </table>
             </div>
           </>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="admin-card" style={{ maxWidth: "600px", padding: "24px" }}>
+            <h3 style={{ borderBottom: "1px solid #334155", paddingBottom: "10px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px", color: "#fff" }}>
+              <LucideIcon name="bell" style={{ color: "#e2ff3b" }} /> Telegram Bot Integration
+            </h3>
+            <p style={{ color: "#94a3b8", fontSize: "13px", lineHeight: "1.5", marginBottom: "20px" }}>
+              Configure a Telegram bot to automatically receive payment receipts whenever users confirm deposits. You can create a bot by messaging <strong>@BotFather</strong> on Telegram and retrieve your Chat ID by messaging <strong>@userinfobot</strong>.
+            </p>
+            <div className="form-group" style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "6px", color: "#94a3b8", fontSize: "12px", fontWeight: "600" }}>Telegram Bot Token</label>
+              <input 
+                type="text" 
+                className="admin-input" 
+                placeholder="e.g. 1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ" 
+                value={telegramBotToken} 
+                onChange={e => {
+                  setTelegramBotToken(e.target.value);
+                  localStorage.setItem("telegramBotToken", e.target.value);
+                }} 
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "6px", color: "#94a3b8", fontSize: "12px", fontWeight: "600" }}>Telegram Chat ID</label>
+              <input 
+                type="text" 
+                className="admin-input" 
+                placeholder="e.g. 987654321" 
+                value={telegramChatId} 
+                onChange={e => {
+                  setTelegramChatId(e.target.value);
+                  localStorage.setItem("telegramChatId", e.target.value);
+                }} 
+              />
+            </div>
+            <button className="admin-btn admin-btn-primary" onClick={() => alert("Telegram settings saved successfully!")}>
+              Save Configuration
+            </button>
+          </div>
         )}
 
       </main>

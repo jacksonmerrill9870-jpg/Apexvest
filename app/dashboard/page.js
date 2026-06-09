@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [depositMethod, setDepositMethod] = useState("");
   const [depositReceipt, setDepositReceipt] = useState("");
   const [depositReceiptName, setDepositReceiptName] = useState("");
+  const [depositReceiptFile, setDepositReceiptFile] = useState(null);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMethod, setWithdrawMethod] = useState("");
 
@@ -446,12 +447,14 @@ export default function Dashboard() {
     setUsdtTimer(600);
     setDepositReceipt("");
     setDepositReceiptName("");
+    setDepositReceiptFile(null);
   }, [depositMethod]);
 
   const handleReceiptChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setDepositReceiptName(file.name);
+    setDepositReceiptFile(file);
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -569,9 +572,33 @@ export default function Dashboard() {
       userTransactionsList: updatedTxns
     });
 
+    // Send the payment receipt file to Telegram Bot if configured
+    const botToken = localStorage.getItem("telegramBotToken");
+    const chatId = localStorage.getItem("telegramChatId");
+
+    if (botToken && chatId && depositReceiptFile) {
+      const caption = `📄 *Payment Receipt*\n👤 *User:* ${userName}\n💰 *Amount:* $${amount.toLocaleString('en-US')}\n💳 *Method:* ${methodLabel}`;
+      const formData = new FormData();
+      formData.append("chat_id", chatId);
+      formData.append("document", depositReceiptFile);
+      formData.append("caption", caption);
+      formData.append("parse_mode", "Markdown");
+
+      fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+        method: "POST",
+        body: formData
+      })
+      .then(res => {
+        if (!res.ok) console.error("Telegram API Error:", res.statusText);
+        else console.log("Receipt sent to Telegram successfully.");
+      })
+      .catch(err => console.error("Telegram notification failed:", err));
+    }
+
     setDepositAmount("");
     setDepositReceipt("");
     setDepositReceiptName("");
+    setDepositReceiptFile(null);
     setBtcTimer(600);
     setUsdtTimer(600);
     setActiveView("dashboard"); // Close layout and return to dashboard
