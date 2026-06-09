@@ -94,14 +94,14 @@ export default function ClientShell({ children }) {
       setLoginError("");
       closeModal();
       window.dispatchEvent(new CustomEvent("auth-state-changed"));
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } else if (isDemoLogin) {
       localStorage.setItem("isLoggedIn", "true");
       setIsLoggedIn(true);
       setLoginError("");
       closeModal();
       window.dispatchEvent(new CustomEvent("auth-state-changed"));
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } else {
       setLoginError("Invalid email or password. Please try again.");
     }
@@ -176,7 +176,7 @@ export default function ClientShell({ children }) {
     setIsLoggedIn(true);
     closeModal();
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
-    router.push("/dashboard");
+    window.location.href = "/dashboard";
   };
 
   const handleLogout = () => {
