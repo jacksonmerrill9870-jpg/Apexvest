@@ -1119,7 +1119,7 @@ export default function Dashboard() {
             <span className="logo-text">APEX<span>VEST</span></span>
           </div>
           <h2>Access Investor Dashboard</h2>
-          <p className="gateway-desc">Sign in with the demo account credentials to review portfolio allocations, wallet balances, and investment feeds.</p>
+          <p className="gateway-desc">Sign in to review portfolio allocations, wallet balances, and investment feeds.</p>
           
           <form onSubmit={handleDemoLogin} className="modal-form active">
             {errorMsg && (
@@ -1138,48 +1138,33 @@ export default function Dashboard() {
             )}
             
             <div className="form-group">
-              <label>Demo Email Address</label>
+              <label>Email Address</label>
               <div className="input-wrapper">
                 <LucideIcon name="mail" className="input-icon" />
                 <input 
                   type="email" 
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
-                  placeholder="demo@apexvest.com" 
+                  placeholder="Enter Email" 
                 />
               </div>
             </div>
 
             <div className="form-group">
-              <label>Demo Password</label>
+              <label>Password</label>
               <div className="input-wrapper">
                 <LucideIcon name="lock" className="input-icon" />
                 <input 
                   type="password" 
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
-                  placeholder="password123" 
+                  placeholder="Password" 
                 />
               </div>
             </div>
 
-            <button type="submit" className="btn btn-filled w-full btn-large">Log In as Demo User</button>
+            <button type="submit" className="btn btn-filled w-full btn-large">Log In to Portfolio</button>
           </form>
-
-          <div className="credential-note" style={{
-            marginTop: "15px",
-            padding: "12px",
-            border: "1px dashed rgba(0,0,0,0.15)",
-            borderRadius: "8px",
-            fontSize: "12px",
-            color: "#64748b",
-            backgroundColor: "#fafafa"
-          }}>
-            <p style={{ margin: "0 0 4px", fontWeight: "600", color: "#000" }}>Demo Credentials:</p>
-            <p style={{ margin: "0 0 2px" }}><strong>Demo Email</strong>: demo@apexvest.com</p>
-            <p style={{ margin: "0 0 2px" }}><strong>Demo Password</strong>: password123</p>
-            <p className="note-sub" style={{ margin: "4px 0 0", fontStyle: "italic", fontSize: "10.5px" }}>* Leave inputs empty and click button for instant access.</p>
-          </div>
         </div>
       </div>
     );

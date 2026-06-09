@@ -515,7 +515,7 @@ export default function ClientShell({ children }) {
                   type="email" 
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="demo@apexvest.com"
+                  placeholder="Enter Email"
                   required 
                 />
               </div>
@@ -528,25 +528,12 @@ export default function ClientShell({ children }) {
                   type="password" 
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="password123"
+                  placeholder="Password"
                   required 
                 />
               </div>
             </div>
             <button type="submit" className="btn btn-filled w-full btn-large">Log In to Portfolio</button>
-            <div className="credential-note" style={{ 
-              marginTop: "15px", 
-              padding: "12px", 
-              border: "1px dashed rgba(0,0,0,0.15)", 
-              borderRadius: "8px", 
-              fontSize: "12px", 
-              color: "#64748b", 
-              backgroundColor: "#fafafa" 
-            }}>
-              <p style={{ margin: "0 0 4px", fontWeight: "600", color: "#000" }}>Demo Credentials:</p>
-              <p style={{ margin: "0 0 2px" }}><strong>Email:</strong> demo@apexvest.com</p>
-              <p style={{ margin: "0" }}><strong>Password:</strong> password123</p>
-            </div>
           </form>
 
           <form className={`modal-form ${modalTab === "signup" ? "active" : ""}`} onSubmit={handleSignupSubmit}>
