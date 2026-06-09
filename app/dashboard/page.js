@@ -1257,18 +1257,7 @@ export default function Dashboard() {
               </div>
               
               {showNotifications && (
-                <div style={{
-                  position: "absolute",
-                  top: "45px",
-                  right: "-10px",
-                  width: "320px",
-                  backgroundColor: "#ffffff",
-                  boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
-                  borderRadius: "12px",
-                  border: "1px solid #eef0f3",
-                  zIndex: 1000,
-                  overflow: "hidden"
-                }}>
+                <div className="notifications-dropdown">
                   <div style={{ padding: "16px", borderBottom: "1px solid #eef0f3", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>Notifications</h4>
                     <span style={{ fontSize: "11px", color: "#2563eb", cursor: "pointer", fontWeight: "600" }} onClick={() => setNotificationsList(notificationsList.map(n => ({...n, unread: false})))}>Mark all as read</span>
@@ -2443,7 +2432,7 @@ export default function Dashboard() {
             </div>
 
             {/* Filter Buttons Stack */}
-            <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "20px" }}>
               {["all", "deposit", "withdrawal", "pending"].map((filter) => (
                 <button
                   key={filter}
