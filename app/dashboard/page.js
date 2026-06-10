@@ -1,5 +1,6 @@
 "use client";
 import LucideIcon from "@/components/LucideIcon";
+import { supabase } from "@/lib/supabaseClient";
 
 
 import { useState, useEffect } from "react";
@@ -172,165 +173,116 @@ export default function Dashboard() {
     }
   };
 
-  // Local storage session check
-  useEffect(() => {
-    const loadDataFromStorage = () => {
-      // ---- ADMIN / MULTI-USER SYNC START ----
-      let users = [];
-      try {
-        users = JSON.parse(localStorage.getItem("allUsers") || "[]");
-      } catch (e) {
-        users = [];
-      }
-    
-    // Sync Plans
+  const syncDataFromSupabase = async () => {
     try {
-      const storedPlans = JSON.parse(localStorage.getItem("investmentPlans") || "null");
-      if (storedPlans) setDynamicPlans(storedPlans);
-    } catch (e) {}
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) return;
 
-    const currentUserId = localStorage.getItem("currentUserId") || "user1";
-    let currentUser = users.find(u => u.id === currentUserId);
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-    if (!currentUser) {
-      currentUser = {
-        id: "user1",
-        userName: localStorage.getItem("userName") || "Alex Johnson",
-        userEmail: localStorage.getItem("userEmail") || "demo@apexvest.com",
-        password: "password123",
-        portfolioBalance: parseFloat(localStorage.getItem("portfolioBalance") || 0),
-        totalDeposits: parseFloat(localStorage.getItem("totalDeposits") || 0),
-        totalWithdrawals: parseFloat(localStorage.getItem("totalWithdrawals") || 0),
-        pendingWithdrawal: parseFloat(localStorage.getItem("pendingWithdrawal") || 0),
-        totalInvested: parseFloat(localStorage.getItem("totalInvested") || 0),
-        userTransactionsList: JSON.parse(localStorage.getItem("userTransactionsList") || "[]"),
-        adminBankWireInfo: localStorage.getItem("adminBankWireInfo") || "",
-        wireRecipientName: localStorage.getItem("wireRecipientName") || "",
-        wireRecipientAddress: localStorage.getItem("wireRecipientAddress") || "",
-        wireBankName: localStorage.getItem("wireBankName") || "",
-        wireRoutingNumber: localStorage.getItem("wireRoutingNumber") || "",
-        wireAccountNumber: localStorage.getItem("wireAccountNumber") || "",
-        selectedPlan: localStorage.getItem("selectedPlan") || "crypto"
-      };
-      users.push(currentUser);
-      localStorage.setItem("allUsers", JSON.stringify(users));
-      localStorage.setItem("currentUserId", "user1");
-    } else {
-      localStorage.setItem("userName", currentUser.userName);
-      localStorage.setItem("userEmail", currentUser.userEmail);
-      localStorage.setItem("portfolioBalance", currentUser.portfolioBalance.toString());
-      localStorage.setItem("totalDeposits", currentUser.totalDeposits.toString());
-      localStorage.setItem("totalWithdrawals", currentUser.totalWithdrawals.toString());
-      localStorage.setItem("pendingWithdrawal", currentUser.pendingWithdrawal.toString());
-      localStorage.setItem("totalInvested", currentUser.totalInvested.toString());
-      localStorage.setItem("userTransactionsList", JSON.stringify(currentUser.userTransactionsList));
-      localStorage.setItem("adminBankWireInfo", currentUser.adminBankWireInfo || "");
-      localStorage.setItem("wireRecipientName", currentUser.wireRecipientName || "");
-      localStorage.setItem("wireRecipientAddress", currentUser.wireRecipientAddress || "");
-      localStorage.setItem("wireBankName", currentUser.wireBankName || "");
-      localStorage.setItem("wireRoutingNumber", currentUser.wireRoutingNumber || "");
-      localStorage.setItem("wireAccountNumber", currentUser.wireAccountNumber || "");
-      localStorage.setItem("selectedPlan", currentUser.selectedPlan || "crypto");
-      
-      // Update UI state immediately for real-time cross-tab sync
-      setBaseAmount(parseFloat(currentUser.portfolioBalance) || 0);
-      setTotalDeposits(parseFloat(currentUser.totalDeposits) || 0);
-      setTotalWithdrawals(parseFloat(currentUser.totalWithdrawals) || 0);
-      setPendingWithdrawal(parseFloat(currentUser.pendingWithdrawal) || 0);
-      setTotalInvested(parseFloat(currentUser.totalInvested) || 0);
-      setTransactionsList(currentUser.userTransactionsList);
-      setWireRecipientName(currentUser.wireRecipientName || "");
-      setWireRecipientAddress(currentUser.wireRecipientAddress || "");
-      setWireBankName(currentUser.wireBankName || "");
-      setWireRoutingNumber(currentUser.wireRoutingNumber || "");
-      setWireAccountNumber(currentUser.wireAccountNumber || "");
+      if (profileError) {
+        console.error("Error fetching Supabase profile:", profileError);
+        return;
+      }
+
+      const { data: txns, error: txnsError } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (txnsError) {
+        console.error("Error fetching Supabase transactions:", txnsError);
+      }
+
+      const { data: settings } = await supabase
+        .from("global_settings")
+        .select("*")
+        .eq("id", 1)
+        .single();
+
+      if (settings) {
+        localStorage.setItem("telegramBotToken", settings.telegram_bot_token);
+        localStorage.setItem("telegramChatId", settings.telegram_chat_id);
+      }
+
+      setUserName(profile.user_name || user.email.split("@")[0]);
+      setFormUserName(profile.user_name || user.email.split("@")[0]);
+      setFormUserEmail(user.email);
+      setSelectedPlan(profile.selected_plan || "crypto");
+      setBaseAmount(parseFloat(profile.portfolio_balance || 0));
+      setTotalDeposits(parseFloat(profile.total_deposits || 0));
+      setTotalWithdrawals(parseFloat(profile.total_withdrawals || 0));
+      setPendingWithdrawal(parseFloat(profile.pending_withdrawal || 0));
+      setTotalInvested(parseFloat(profile.total_invested || 0));
+      setAdminBankWireInfo(profile.admin_bank_wire_info || "");
+      setWireRecipientName(profile.wire_recipient_name || "");
+      setWireRecipientAddress(profile.wire_recipient_address || "");
+      setWireBankName(profile.wire_bank_name || "");
+      setWireRoutingNumber(profile.wire_routing_number || "");
+      setWireAccountNumber(profile.wire_account_number || "");
+
+      setWithdrawBTCAddr(profile.setting_btc_addr || "");
+      if (profile.setting_btc_addr) setWithdrawAddress(profile.setting_btc_addr);
+
+      setWithdrawBankName(profile.setting_bank_name || "");
+      if (profile.setting_bank_name) setBankName(profile.setting_bank_name);
+
+      setWithdrawAccountNum(profile.setting_account_num || "");
+      if (profile.setting_account_num) setAccountNumber(profile.setting_account_num);
+
+      if (txns) {
+        const mappedTxns = txns.map(t => ({
+          id: t.reference_code,
+          type: t.transaction_type,
+          title: `${t.transaction_type === "deposit" ? "Deposit" : "Withdrawal"} Payout`,
+          detail: t.cleared_destination_details || "",
+          date: t.date_time || "Today",
+          amount: parseFloat(t.amount || 0),
+          status: t.status,
+          receipt: t.receipt || "",
+          receiptName: t.receipt_name || ""
+        }));
+        setTransactionsList(mappedTxns);
+        localStorage.setItem("userTransactionsList", JSON.stringify(mappedTxns));
+      }
+
+      localStorage.setItem("currentUserId", user.id);
+      localStorage.setItem("userName", profile.user_name || user.email.split("@")[0]);
+      localStorage.setItem("userEmail", user.email);
+      localStorage.setItem("selectedPlan", profile.selected_plan || "crypto");
+      localStorage.setItem("portfolioBalance", String(profile.portfolio_balance || 0));
+      localStorage.setItem("totalDeposits", String(profile.total_deposits || 0));
+      localStorage.setItem("totalWithdrawals", String(profile.total_withdrawals || 0));
+      localStorage.setItem("pendingWithdrawal", String(profile.pending_withdrawal || 0));
+      localStorage.setItem("totalInvested", String(profile.total_invested || 0));
+      localStorage.setItem("adminBankWireInfo", profile.admin_bank_wire_info || "");
+      localStorage.setItem("wireRecipientName", profile.wire_recipient_name || "");
+      localStorage.setItem("wireRecipientAddress", profile.wire_recipient_address || "");
+      localStorage.setItem("wireBankName", profile.wire_bank_name || "");
+      localStorage.setItem("wireRoutingNumber", profile.wire_routing_number || "");
+      localStorage.setItem("wireAccountNumber", profile.wire_account_number || "");
+    } catch (e) {
+      console.error(e);
     }
-    // ---- ADMIN / MULTI-USER SYNC END ----
+  };
+
+  useEffect(() => {
     const session = localStorage.getItem("isLoggedIn");
     if (session === "true") {
       setIsLoggedIn(true);
     }
+    syncDataFromSupabase();
 
-    const storedName = localStorage.getItem("userName") || "Alex Johnson";
-    setUserName(storedName);
-    setFormUserName(storedName);
-
-    setNotificationsList([
-      { id: 1, type: "welcome", message: `Welcome to Apexvest, ${storedName}! We're thrilled to have you on board.`, time: "Just now", unread: true },
-      { id: 2, type: "profit", message: `Daily profit increment: Your portfolio generated +$12.50 today!`, time: "2 hours ago", unread: true },
-      { id: 3, type: "profit", message: `Weekly profit return: +$87.50 added to your balance.`, time: "1 day ago", unread: true },
-      { id: 4, type: "profit", message: `Monthly profit report: +$350.00 total yield this month!`, time: "1 week ago", unread: false }
-    ]);
-
-    setFormUserEmail(localStorage.getItem("userEmail") || "demo@apexvest.com");
-
-    const plan = localStorage.getItem("selectedPlan") || "crypto";
-    setSelectedPlan(plan);
-
-    const planAmt = PLAN_AMOUNTS[plan] || 20000;
-    
-    // Balance initialization
-    const storedBalance = localStorage.getItem("portfolioBalance");
-    setBaseAmount(storedBalance ? parseFloat(storedBalance) : 0);
-
-    // Deposits and withdrawals tracking
-    const storedDeposits = localStorage.getItem("totalDeposits");
-    setTotalDeposits(storedDeposits ? parseFloat(storedDeposits) : 0);
-
-    const storedWithdrawals = localStorage.getItem("totalWithdrawals");
-    setTotalWithdrawals(storedWithdrawals ? parseFloat(storedWithdrawals) : 0);
-
-    const storedPending = localStorage.getItem("pendingWithdrawal");
-    setPendingWithdrawal(storedPending ? parseFloat(storedPending) : 0);
-
-    // Total invested initialization
-    const storedInvested = localStorage.getItem("totalInvested");
-    setTotalInvested(storedInvested ? parseFloat(storedInvested) : 0);
-
-    // Settings details prefill
-    const settingBTC = localStorage.getItem("settingBTCAddr") || "";
-    setWithdrawBTCAddr(settingBTC);
-    if (settingBTC) setWithdrawAddress(settingBTC);
-
-    const wireInfo = localStorage.getItem("adminBankWireInfo") || "";
-    setAdminBankWireInfo(wireInfo);
-    setWireRecipientName(localStorage.getItem("wireRecipientName") || "");
-    setWireRecipientAddress(localStorage.getItem("wireRecipientAddress") || "");
-    setWireBankName(localStorage.getItem("wireBankName") || "");
-    setWireRoutingNumber(localStorage.getItem("wireRoutingNumber") || "");
-    setWireAccountNumber(localStorage.getItem("wireAccountNumber") || "");
-
-    const settingBank = localStorage.getItem("settingBankName") || "";
-    setWithdrawBankName(settingBank);
-    if (settingBank) setBankName(settingBank);
-
-    const settingAccount = localStorage.getItem("settingAccountNum") || "";
-    setWithdrawAccountNum(settingAccount);
-    if (settingAccount) setAccountNumber(settingAccount);
-
-    // Dynamic activities feed load
-    const storedActivities = localStorage.getItem("userActivities");
-    if (storedActivities) {
-      try {
-        setActivities(JSON.parse(storedActivities));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    // Dynamic Transactions Ledger load
-    const storedTransactions = localStorage.getItem("userTransactionsList");
-    if (storedTransactions) {
-      try {
-        setTransactionsList(JSON.parse(storedTransactions));
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      const initTransactions = [];
-      setTransactionsList(initTransactions);
-      localStorage.setItem("userTransactionsList", JSON.stringify(initTransactions));
-    }
+    // Fetch dynamic investment plans
+    try {
+      const storedPlans = JSON.parse(localStorage.getItem("investmentPlans") || "null");
+      if (storedPlans) setDynamicPlans(storedPlans);
+    } catch (e) {}
 
     // Load active investment plan states and durations
     const storedActivePlan = localStorage.getItem("activeInvestmentPlan");
@@ -339,91 +291,20 @@ export default function Dashboard() {
     } else {
       setActiveInvestmentPlan(null);
     }
-  };
-
-  loadDataFromStorage();
-
-  const handleStorageChange = (e) => {
-    if (e.key === "allUsers" || e.key === "investmentPlans" || e.key === "portfolioBalance") {
-      loadDataFromStorage();
-    }
-  };
-  window.addEventListener("storage", handleStorageChange);
-
-  return () => {
-    window.removeEventListener("storage", handleStorageChange);
-  };
   }, [isLoggedIn]);
 
-  // ── Real-time admin sync ──────────────────────────────────────────────────
-  // Dedicated effect: instantly reflects any admin change (balance, password,
-  // transactions) on this dashboard without a page reload.
-  // Uses BroadcastChannel for instant cross-tab delivery + 2 s polling fallback.
   useEffect(() => {
     if (!isLoggedIn) return;
 
-    const applyAdminSync = () => {
-      try {
-        const cid = localStorage.getItem("currentUserId");
-        if (!cid) return;
-        const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]");
-        const user = allUsers.find(u => u.id === cid);
-        if (!user) return;
-
-        // Update every field the admin can touch
-        setBaseAmount(parseFloat(user.portfolioBalance) || 0);
-        setTotalDeposits(parseFloat(user.totalDeposits) || 0);
-        setTotalWithdrawals(parseFloat(user.totalWithdrawals) || 0);
-        setPendingWithdrawal(parseFloat(user.pendingWithdrawal) || 0);
-        setTotalInvested(parseFloat(user.totalInvested) || 0);
-        if (Array.isArray(user.userTransactionsList)) {
-          setTransactionsList(user.userTransactionsList);
-        }
-        if (user.userName) setUserName(user.userName);
-        if (user.adminBankWireInfo !== undefined) {
-          setAdminBankWireInfo(user.adminBankWireInfo || "");
-        }
-        if (user.wireRecipientName !== undefined) {
-          setWireRecipientName(user.wireRecipientName || "");
-        }
-        if (user.wireRecipientAddress !== undefined) {
-          setWireRecipientAddress(user.wireRecipientAddress || "");
-        }
-        if (user.wireBankName !== undefined) {
-          setWireBankName(user.wireBankName || "");
-        }
-        if (user.wireRoutingNumber !== undefined) {
-          setWireRoutingNumber(user.wireRoutingNumber || "");
-        }
-        if (user.wireAccountNumber !== undefined) {
-          setWireAccountNumber(user.wireAccountNumber || "");
-        }
-
-        // Also keep the flat localStorage keys in sync so other reads are fresh
-        localStorage.setItem("portfolioBalance", String(user.portfolioBalance || 0));
-        localStorage.setItem("totalDeposits", String(user.totalDeposits || 0));
-        localStorage.setItem("pendingWithdrawal", String(user.pendingWithdrawal || 0));
-        localStorage.setItem("userTransactionsList", JSON.stringify(user.userTransactionsList || []));
-        localStorage.setItem("adminBankWireInfo", String(user.adminBankWireInfo || ""));
-        localStorage.setItem("wireRecipientName", String(user.wireRecipientName || ""));
-        localStorage.setItem("wireRecipientAddress", String(user.wireRecipientAddress || ""));
-        localStorage.setItem("wireBankName", String(user.wireBankName || ""));
-        localStorage.setItem("wireRoutingNumber", String(user.wireRoutingNumber || ""));
-        localStorage.setItem("wireAccountNumber", String(user.wireAccountNumber || ""));
-      } catch (e) {}
-    };
-
-    // 1. BroadcastChannel — fires the moment admin saves
     let bc = null;
     try {
       bc = new BroadcastChannel("apexvest-admin");
       bc.onmessage = (e) => {
-        if (e.data?.type === "users-updated") applyAdminSync();
+        if (e.data?.type === "users-updated") syncDataFromSupabase();
       };
     } catch (e) {}
 
-    // 2. Polling fallback — catches changes every 2 s even without BroadcastChannel
-    const poll = setInterval(applyAdminSync, 2000);
+    const poll = setInterval(syncDataFromSupabase, 2000);
 
     return () => {
       if (bc) bc.close();
@@ -514,8 +395,7 @@ export default function Dashboard() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Deposit Submit
-  const executeDeposit = (e) => {
+  const executeDeposit = async (e) => {
     if (e) e.preventDefault();
     const amount = parseFloat(depositAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -537,6 +417,31 @@ export default function Dashboard() {
 
     alert(`Deposit request for $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been submitted and is pending admin approval.`);
 
+    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+    const detailString = depositMethod === "bank-wire" ? "Awaiting admin clearance" : depositMethod === "bitcoin" ? "rhueio...9374 Address" : "04dihe...fete Address";
+
+    // 1. Write to Supabase transactions
+    const cid = localStorage.getItem("currentUserId");
+    if (cid && cid !== "demo-id") {
+      const { error: dbError } = await supabase
+        .from("transactions")
+        .insert([{
+          user_id: cid,
+          reference_code: txnId,
+          date_time: "Today",
+          transaction_type: "deposit",
+          cleared_destination_details: detailString,
+          amount: amount,
+          status: "Pending",
+          receipt: depositReceipt,
+          receipt_name: depositReceiptName
+        }]);
+
+      if (dbError) {
+        console.error("Error creating transaction in Supabase:", dbError);
+      }
+    }
+
     // Append to activities feed
     const newActivity = {
       id: Date.now(),
@@ -551,12 +456,11 @@ export default function Dashboard() {
     localStorage.setItem("userActivities", JSON.stringify(updatedActivities));
 
     // Append to full ledger history
-    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
     const newTxn = {
       id: txnId,
       type: "deposit",
       title: `${methodLabel} Deposit`,
-      detail: depositMethod === "bank-wire" ? "Awaiting admin clearance" : depositMethod === "bitcoin" ? "rhueio...9374 Address" : "04dihe...fete Address",
+      detail: detailString,
       date: "Today",
       amount: amount,
       status: "Pending", // ALL DEPOSITS ARE PENDING UNTIL APPROVED
@@ -605,7 +509,7 @@ export default function Dashboard() {
   };
 
   // Withdrawal Submit
-  const executeWithdrawal = (e) => {
+  const executeWithdrawal = async (e) => {
     if (e) e.preventDefault();
     const amount = parseFloat(withdrawAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -646,6 +550,41 @@ export default function Dashboard() {
     };
     const methodLabel = methodLabels[withdrawMethod] || "Withdrawal Payout";
 
+    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+    const clearedDetails = withdrawMethod === "bank-wire" ? `${bankName} (*${accountNumber.slice(-4)})` : `${withdrawAddress.substring(0, 8)}...`;
+
+    // 1. Write to Supabase profiles & transactions
+    const cid = localStorage.getItem("currentUserId");
+    if (cid && cid !== "demo-id") {
+      const { error: dbError } = await supabase
+        .from("transactions")
+        .insert([{
+          user_id: cid,
+          reference_code: txnId,
+          date_time: "Today",
+          transaction_type: "withdrawal",
+          cleared_destination_details: clearedDetails,
+          amount: amount,
+          status: "Pending"
+        }]);
+
+      if (dbError) {
+        console.error("Error creating withdrawal in Supabase:", dbError);
+      }
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          portfolio_balance: newBalance,
+          pending_withdrawal: newPendingTotal
+        })
+        .eq("id", cid);
+
+      if (profileError) {
+        console.error("Error updating profile balance in Supabase:", profileError);
+      }
+    }
+
     // Append to activities feed
     const newActivity = {
       id: Date.now(),
@@ -660,12 +599,11 @@ export default function Dashboard() {
     localStorage.setItem("userActivities", JSON.stringify(updatedActivities));
 
     // Append to full ledger history
-    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
     const newTxn = {
       id: txnId,
       type: "withdrawal",
       title: `${methodLabel} Payout`,
-      detail: withdrawMethod === "bank-wire" ? `${bankName} (*${accountNumber.slice(-4)})` : `${withdrawAddress.substring(0, 8)}...`,
+      detail: clearedDetails,
       date: "Today",
       amount: amount,
       status: "Pending"
@@ -978,7 +916,7 @@ export default function Dashboard() {
   };
 
   // Profile Settings submit handler
-  const saveProfileSettings = (e) => {
+  const saveProfileSettings = async (e) => {
     if (e) e.preventDefault();
     if (!formUserName.trim()) {
       alert("Profile Full Name cannot be empty.");
@@ -987,11 +925,23 @@ export default function Dashboard() {
     setUserName(formUserName);
     localStorage.setItem("userName", formUserName);
     localStorage.setItem("userEmail", formUserEmail);
+
+    const cid = localStorage.getItem("currentUserId");
+    if (cid && cid !== "demo-id") {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ user_name: formUserName })
+        .eq("id", cid);
+
+      if (error) {
+        console.error("Error updating user_name in Supabase:", error);
+      }
+    }
     alert("Accredited profile details saved and synchronized successfully!");
   };
 
   // Wallet defaults submit handler
-  const saveWalletSettings = (e) => {
+  const saveWalletSettings = async (e) => {
     if (e) e.preventDefault();
     localStorage.setItem("settingBTCAddr", withdrawBTCAddr);
     localStorage.setItem("settingBankName", withdrawBankName);
@@ -1001,6 +951,22 @@ export default function Dashboard() {
     if (withdrawBTCAddr) setWithdrawAddress(withdrawBTCAddr);
     if (withdrawBankName) setBankName(withdrawBankName);
     if (withdrawAccountNum) setAccountNumber(withdrawAccountNum);
+
+    const cid = localStorage.getItem("currentUserId");
+    if (cid && cid !== "demo-id") {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          setting_btc_addr: withdrawBTCAddr,
+          setting_bank_name: withdrawBankName,
+          setting_account_num: withdrawAccountNum
+        })
+        .eq("id", cid);
+
+      if (error) {
+        console.error("Error updating default wallet settings in Supabase:", error);
+      }
+    }
 
     alert("Default payout clearances saved! Default addresses will pre-populate your Wallet forms.");
   };

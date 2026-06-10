@@ -1,5 +1,6 @@
 "use client";
 import LucideIcon from "@/components/LucideIcon";
+import { supabase } from "@/lib/supabaseClient";
 
 
 import { useState, useEffect } from "react";
@@ -61,53 +62,63 @@ export default function ClientShell({ children }) {
     }
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
+    setLoginError("");
 
-    // First try to match against registered users in allUsers
-    let allUsers = [];
-    try { allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]"); } catch (err) { allUsers = []; }
-
-    const matchedUser = allUsers.find(
-      u => u.userEmail.toLowerCase() === loginEmail.toLowerCase() && u.password === loginPassword
-    );
-
-    // Fall back to demo account
     const isDemoLogin =
       loginEmail.toLowerCase() === "demo@apexvest.com" && loginPassword === "password123";
 
-    if (matchedUser) {
-      // Point session at this user
-      localStorage.setItem("currentUserId", matchedUser.id);
-      localStorage.setItem("userName", matchedUser.userName);
-      localStorage.setItem("userEmail", matchedUser.userEmail);
-      localStorage.setItem("selectedPlan", matchedUser.selectedPlan || "crypto");
-      localStorage.setItem("portfolioBalance", String(matchedUser.portfolioBalance || 0));
-      localStorage.setItem("totalDeposits", String(matchedUser.totalDeposits || 0));
-      localStorage.setItem("totalWithdrawals", String(matchedUser.totalWithdrawals || 0));
-      localStorage.setItem("pendingWithdrawal", String(matchedUser.pendingWithdrawal || 0));
-      localStorage.setItem("totalInvested", String(matchedUser.totalInvested || 0));
-      localStorage.setItem("userTransactionsList", JSON.stringify(matchedUser.userTransactionsList || []));
-      localStorage.setItem("adminBankWireInfo", matchedUser.adminBankWireInfo || "");
-      localStorage.setItem("isLoggedIn", "true");
-      setIsLoggedIn(true);
-      setLoginError("");
-      closeModal();
-      window.dispatchEvent(new CustomEvent("auth-state-changed"));
-      window.location.href = "/dashboard";
-    } else if (isDemoLogin) {
-      localStorage.setItem("isLoggedIn", "true");
-      setIsLoggedIn(true);
-      setLoginError("");
-      closeModal();
-      window.dispatchEvent(new CustomEvent("auth-state-changed"));
-      window.location.href = "/dashboard";
-    } else {
-      setLoginError("Invalid email or password. Please try again.");
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword,
+    });
+
+    if (error) {
+      if (isDemoLogin) {
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("userName", "Demo User");
+        localStorage.setItem("userEmail", "demo@apexvest.com");
+        localStorage.setItem("currentUserId", "demo-id");
+        setIsLoggedIn(true);
+        closeModal();
+        window.dispatchEvent(new CustomEvent("auth-state-changed"));
+        window.location.href = "/dashboard";
+        return;
+      }
+      setLoginError(error.message);
+      return;
     }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
+
+    localStorage.setItem("currentUserId", data.user.id);
+    localStorage.setItem("userName", profile?.user_name || data.user.email.split("@")[0]);
+    localStorage.setItem("userEmail", data.user.email);
+    localStorage.setItem("selectedPlan", profile?.selected_plan || "crypto");
+    localStorage.setItem("portfolioBalance", String(profile?.portfolio_balance || 0));
+    localStorage.setItem("totalDeposits", String(profile?.total_deposits || 0));
+    localStorage.setItem("totalWithdrawals", String(profile?.total_withdrawals || 0));
+    localStorage.setItem("pendingWithdrawal", String(profile?.pending_withdrawal || 0));
+    localStorage.setItem("totalInvested", String(profile?.total_invested || 0));
+    localStorage.setItem("adminBankWireInfo", profile?.admin_bank_wire_info || "");
+    localStorage.setItem("wireRecipientName", profile?.wire_recipient_name || "");
+    localStorage.setItem("wireRecipientAddress", profile?.wire_recipient_address || "");
+    localStorage.setItem("wireBankName", profile?.wire_bank_name || "");
+    localStorage.setItem("wireRoutingNumber", profile?.wire_routing_number || "");
+    localStorage.setItem("wireAccountNumber", profile?.wire_account_number || "");
+    localStorage.setItem("isLoggedIn", "true");
+    setIsLoggedIn(true);
+    closeModal();
+    window.dispatchEvent(new CustomEvent("auth-state-changed"));
+    window.location.href = "/dashboard";
   };
 
-  const handleSignupSubmit = (e) => {
+  const handleSignupSubmit = async (e) => {
     e.preventDefault();
     const passwords = e.target.querySelectorAll('input[type="password"]');
     if (passwords.length === 2 && passwords[0].value !== passwords[1].value) {
@@ -125,36 +136,42 @@ export default function ClientShell({ children }) {
     const password = passwordInput ? passwordInput.value : "password123";
     const plan = selectPlan ? selectPlan.value : "crypto";
 
-    // Check for duplicate email
-    let allUsers = [];
-    try { allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]"); } catch (e) { allUsers = []; }
-    if (allUsers.find(u => u.userEmail.toLowerCase() === useremail.toLowerCase())) {
-      alert("An account with this email already exists. Please log in instead.");
+    const { data, error } = await supabase.auth.signUp({
+      email: useremail,
+      password: password,
+    });
+
+    if (error) {
+      alert(`Registration Error: ${error.message}`);
       return;
     }
 
-    // Create a new unique user record
-    const newUserId = `user-${Date.now()}`;
-    const newUser = {
-      id: newUserId,
-      userName: username,
-      userEmail: useremail,
-      password: password,
-      selectedPlan: plan,
-      portfolioBalance: 0,
-      totalDeposits: 0,
-      totalWithdrawals: 0,
-      pendingWithdrawal: 0,
-      totalInvested: 0,
-      userTransactionsList: [],
-      adminBankWireInfo: ""
-    };
+    if (!data.user) {
+      alert("Registration failed. Please check your credentials.");
+      return;
+    }
 
-    allUsers.push(newUser);
-    localStorage.setItem("allUsers", JSON.stringify(allUsers));
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert([
+        {
+          id: data.user.id,
+          user_name: username,
+          user_email: useremail,
+          selected_plan: plan,
+          portfolio_balance: 0,
+          total_deposits: 0,
+          total_withdrawals: 0,
+          pending_withdrawal: 0,
+          total_invested: 0
+        }
+      ]);
 
-    // Point the session at the new user
-    localStorage.setItem("currentUserId", newUserId);
+    if (profileError) {
+      console.error("Profile creation error:", profileError);
+    }
+
+    localStorage.setItem("currentUserId", data.user.id);
     localStorage.setItem("userName", username);
     localStorage.setItem("userEmail", useremail);
     localStorage.setItem("selectedPlan", plan);
@@ -164,6 +181,12 @@ export default function ClientShell({ children }) {
     localStorage.setItem("totalWithdrawals", "0");
     localStorage.setItem("pendingWithdrawal", "0");
     localStorage.setItem("totalInvested", "0");
+    localStorage.setItem("adminBankWireInfo", "");
+    localStorage.setItem("wireRecipientName", "");
+    localStorage.setItem("wireRecipientAddress", "");
+    localStorage.setItem("wireBankName", "");
+    localStorage.setItem("wireRoutingNumber", "");
+    localStorage.setItem("wireAccountNumber", "");
     localStorage.removeItem("userTransactionsList");
     localStorage.removeItem("userActivities");
     localStorage.removeItem("activeInvestmentPlan");
@@ -179,8 +202,12 @@ export default function ClientShell({ children }) {
     window.location.href = "/dashboard";
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("currentUserId");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userEmail");
     setIsLoggedIn(false);
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
     window.location.href = "/";

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import LucideIcon from "@/components/LucideIcon";
+import { supabase } from "@/lib/supabaseClient";
 import "./admin.css";
 
 export default function AdminDashboard() {
@@ -44,31 +45,110 @@ export default function AdminDashboard() {
     loadData();
   }, []);
 
-  const loadData = () => {
+  const loadData = async () => {
     try {
-      const storedUsers = JSON.parse(localStorage.getItem("allUsers") || "[]");
-      setUsers(storedUsers);
-      let currentToken = localStorage.getItem("telegramBotToken");
-      let currentChatId = localStorage.getItem("telegramChatId");
-      if (!currentToken) {
-        currentToken = "8606921616:AAGxD4J__zxovB4yZiBtNdZnI-Ljvwytp6c";
-        localStorage.setItem("telegramBotToken", currentToken);
+      // 1. Fetch profiles
+      const { data: profiles, error: profilesErr } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (profilesErr) {
+        console.error("Error fetching profiles:", profilesErr);
       }
-      if (!currentChatId) {
-        currentChatId = "8486489983";
-        localStorage.setItem("telegramChatId", currentChatId);
+
+      // 2. Fetch transactions
+      const { data: txns, error: txnsErr } = await supabase
+        .from("transactions")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (txnsErr) {
+        console.error("Error fetching transactions:", txnsErr);
       }
-      setTelegramBotToken(currentToken);
-      setTelegramChatId(currentChatId);
+
+      // 3. Map users and their nested transactions list
+      const mappedUsers = (profiles || []).map(p => {
+        const userTxns = (txns || [])
+          .filter(t => t.user_id === p.id)
+          .map(t => ({
+            id: t.reference_code,
+            type: t.transaction_type,
+            title: `${t.transaction_type === "deposit" ? "Deposit" : "Withdrawal"} Payout`,
+            detail: t.cleared_destination_details || "",
+            date: t.date_time || "Today",
+            amount: parseFloat(t.amount || 0),
+            status: t.status,
+            receipt: t.receipt || "",
+            receiptName: t.receipt_name || ""
+          }));
+
+        return {
+          id: p.id,
+          userName: p.user_name || p.user_email?.split("@")[0] || "User",
+          userEmail: p.user_email || "",
+          selectedPlan: p.selected_plan || "crypto",
+          portfolioBalance: parseFloat(p.portfolio_balance || 0),
+          totalDeposits: parseFloat(p.total_deposits || 0),
+          totalWithdrawals: parseFloat(p.total_withdrawals || 0),
+          pendingWithdrawal: parseFloat(p.pending_withdrawal || 0),
+          totalInvested: parseFloat(p.total_invested || 0),
+          adminBankWireInfo: p.admin_bank_wire_info || "",
+          wireRecipientName: p.wire_recipient_name || "",
+          wireRecipientAddress: p.wire_recipient_address || "",
+          wireBankName: p.wire_bank_name || "",
+          wireRoutingNumber: p.wire_routing_number || "",
+          wireAccountNumber: p.wire_account_number || "",
+          userTransactionsList: userTxns
+        };
+      });
+
+      setUsers(mappedUsers);
+
+      // 4. Load investment plans
+      const { data: dbPlans, error: plansErr } = await supabase
+        .from("investment_plans")
+        .select("*")
+        .order("created_at", { ascending: true });
 
       const defaultPlans = [
         { id: "diamond", name: "Diamond Plan", roi: "20%", minDeposit: 500, depositType: "fixed", fixedAmount: 500, duration: "1 month" },
         { id: "premium", name: "Premium Plan", roi: "40%", minDeposit: 1500, depositType: "range", minDeposit: 1500, maxDeposit: 10000, duration: "1 month" }
       ];
-      const storedPlans = JSON.parse(localStorage.getItem("investmentPlans") || "null");
-      setPlans(storedPlans || defaultPlans);
-      if (!storedPlans) {
-        localStorage.setItem("investmentPlans", JSON.stringify(defaultPlans));
+
+      if (plansErr || !dbPlans || dbPlans.length === 0) {
+        setPlans(defaultPlans);
+      } else {
+        const mappedPlans = dbPlans.map(p => ({
+          id: p.id,
+          name: p.name,
+          roi: p.roi,
+          minDeposit: parseFloat(p.min_deposit || 0),
+          maxDeposit: p.max_deposit ? parseFloat(p.max_deposit) : null,
+          depositType: p.deposit_type,
+          fixedAmount: p.fixed_amount ? parseFloat(p.fixed_amount) : null,
+          duration: p.duration
+        }));
+        setPlans(mappedPlans);
+      }
+
+      // 5. Load telegram settings
+      const { data: settings } = await supabase
+        .from("global_settings")
+        .select("*")
+        .eq("id", 1)
+        .single();
+
+      if (settings) {
+        setTelegramBotToken(settings.telegram_bot_token || "");
+        setTelegramChatId(settings.telegram_chat_id || "");
+        localStorage.setItem("telegramBotToken", settings.telegram_bot_token || "");
+        localStorage.setItem("telegramChatId", settings.telegram_chat_id || "");
+      } else {
+        const currentToken = localStorage.getItem("telegramBotToken") || "8606921616:AAGxD4J__zxovB4yZiBtNdZnI-Ljvwytp6c";
+        const currentChatId = localStorage.getItem("telegramChatId") || "8486489983";
+        setTelegramBotToken(currentToken);
+        setTelegramChatId(currentChatId);
       }
     } catch (e) {
       console.error(e);
@@ -85,99 +165,118 @@ export default function AdminDashboard() {
     }
   };
 
-  const saveUsers = (newUsers) => {
-    setUsers(newUsers);
-    localStorage.setItem("allUsers", JSON.stringify(newUsers));
-    broadcastAdminAction("users-updated");
-  };
-
-  const savePlans = (newPlans) => {
-    setPlans(newPlans);
-    localStorage.setItem("investmentPlans", JSON.stringify(newPlans));
-    broadcastAdminAction("users-updated"); // Trigger sync in user dashboard
-  };
-
-
-
   // User Actions
-  const handleFundSubmit = (e) => {
+  const handleFundSubmit = async (e) => {
     e.preventDefault();
     const amount = parseFloat(fundAmount);
     if (isNaN(amount) || amount <= 0) return alert("Invalid amount");
 
-    const updatedUsers = users.map(u => {
-      if (u.id === selectedUser.id) {
-        let newBalance = parseFloat(u.portfolioBalance) || 0;
-        let newTotalDeposits = parseFloat(u.totalDeposits) || 0;
-        if (fundAction === "add") {
-          newBalance += amount;
-          newTotalDeposits += amount;
-        } else {
-          newBalance = Math.max(0, newBalance - amount);
-        }
-        return { ...u, portfolioBalance: newBalance, totalDeposits: newTotalDeposits };
-      }
-      return u;
-    });
-    saveUsers(updatedUsers);
-    closeModal();
+    let newBalance = parseFloat(selectedUser.portfolioBalance) || 0;
+    let newTotalDeposits = parseFloat(selectedUser.totalDeposits) || 0;
+    if (fundAction === "add") {
+      newBalance += amount;
+      newTotalDeposits += amount;
+    } else {
+      newBalance = Math.max(0, newBalance - amount);
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        portfolio_balance: newBalance,
+        total_deposits: newTotalDeposits
+      })
+      .eq("id", selectedUser.id);
+
+    if (error) {
+      alert(`Error processing funds: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+      closeModal();
+    }
   };
 
-  const handleResetFunds = (userId) => {
+  const handleResetFunds = async (userId) => {
     if (!confirm("Are you sure you want to reset this user's balance to $0?")) return;
-    // Always read fresh data from localStorage to avoid stale state
-    const fresh = JSON.parse(localStorage.getItem("allUsers") || "[]");
-    const updatedUsers = fresh.map(u => u.id === userId ? { ...u, portfolioBalance: 0 } : u);
-    saveUsers(updatedUsers);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        portfolio_balance: 0
+      })
+      .eq("id", userId);
+
+    if (error) {
+      alert(`Error resetting balance: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+    }
   };
 
-  // Inline card handlers - always read from localStorage for freshest balance
-  const handleInlineAddFunds = (userId) => {
+  // Inline card handlers
+  const handleInlineAddFunds = async (userId) => {
     const amount = parseFloat(addFundInputs[userId] || "");
     if (isNaN(amount) || amount <= 0) return alert("Enter a valid amount.");
-    const fresh = JSON.parse(localStorage.getItem("allUsers") || "[]");
-    const updatedUsers = fresh.map(u => {
-      if (u.id === userId) {
-        const newBalance = (parseFloat(u.portfolioBalance) || 0) + amount;
-        const newDeposits = (parseFloat(u.totalDeposits) || 0) + amount;
-        return { ...u, portfolioBalance: newBalance, totalDeposits: newDeposits };
-      }
-      return u;
-    });
-    saveUsers(updatedUsers);
-    setAddFundInputs(prev => ({ ...prev, [userId]: "" }));
-    flashSuccess(userId, "add");
+    
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    const newBalance = (parseFloat(user.portfolioBalance) || 0) + amount;
+    const newDeposits = (parseFloat(user.totalDeposits) || 0) + amount;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        portfolio_balance: newBalance,
+        total_deposits: newDeposits
+      })
+      .eq("id", userId);
+
+    if (error) {
+      alert(`Error: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+      setAddFundInputs(prev => ({ ...prev, [userId]: "" }));
+      flashSuccess(userId, "add");
+    }
   };
 
-  const handleInlineRemoveFunds = (userId) => {
+  const handleInlineRemoveFunds = async (userId) => {
     const amount = parseFloat(removeFundInputs[userId] || "");
     if (isNaN(amount) || amount <= 0) return alert("Enter a valid amount.");
-    const fresh = JSON.parse(localStorage.getItem("allUsers") || "[]");
-    const target = fresh.find(u => u.id === userId);
-    if (!target) return;
-    const currentBalance = parseFloat(target.portfolioBalance) || 0;
+    
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    const currentBalance = parseFloat(user.portfolioBalance) || 0;
     if (amount > currentBalance) {
       return alert(`Cannot remove $${amount.toLocaleString()} - user only has $${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} balance.`);
     }
-    const updatedUsers = fresh.map(u => {
-      if (u.id === userId) {
-        const newBalance = Math.max(0, currentBalance - amount);
-        return { ...u, portfolioBalance: newBalance };
-      }
-      return u;
-    });
-    saveUsers(updatedUsers);
-    setRemoveFundInputs(prev => ({ ...prev, [userId]: "" }));
-    flashSuccess(userId, "remove");
+
+    const newBalance = Math.max(0, currentBalance - amount);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        portfolio_balance: newBalance
+      })
+      .eq("id", userId);
+
+    if (error) {
+      alert(`Error: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+      setRemoveFundInputs(prev => ({ ...prev, [userId]: "" }));
+      flashSuccess(userId, "remove");
+    }
   };
 
   const handleInlinePasswordReset = (userId) => {
-    const pwd = (passwordInputs[userId] || "").trim();
-    if (!pwd) return alert("Password cannot be empty.");
-    const updatedUsers = users.map(u => u.id === userId ? { ...u, password: pwd } : u);
-    saveUsers(updatedUsers);
+    alert("Password reset restricted: In a live Supabase environment, user passwords are managed securely by Supabase Auth. To change or reset a user's password, use the Supabase Auth Dashboard or implement a 'Forgot Password' email flow.");
     setPasswordInputs(prev => ({ ...prev, [userId]: "" }));
-    flashSuccess(userId, "pwd");
   };
 
   const flashSuccess = (userId, action) => {
@@ -186,129 +285,202 @@ export default function AdminDashboard() {
     setTimeout(() => setInlineSuccess(prev => ({ ...prev, [key]: false })), 2000);
   };
 
-  const handleDeleteUser = (userId) => {
-    if (!confirm("Are you sure you want to completely delete this user?")) return;
-    const updatedUsers = users.filter(u => u.id !== userId);
-    saveUsers(updatedUsers);
+  const handleDeleteUser = async (userId) => {
+    if (!confirm("Are you sure you want to completely delete this user profile?")) return;
+    const { error } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (error) {
+      alert(`Error deleting user profile: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+    }
   };
 
   const handleChangePassword = (e) => {
     e.preventDefault();
-    if (!newPassword.trim()) return alert("Password cannot be empty");
-    const updatedUsers = users.map(u => u.id === selectedUser.id ? { ...u, password: newPassword } : u);
-    saveUsers(updatedUsers);
-    alert("Password updated!");
+    alert("Password reset restricted: In a live Supabase environment, user passwords are managed securely by Supabase Auth. To change or reset a user's password, use the Supabase Auth Dashboard or implement a 'Forgot Password' email flow.");
     closeModal();
   };
 
-  const handleBankWireSubmit = (e) => {
+  const handleBankWireSubmit = async (e) => {
     e.preventDefault();
-    const updatedUsers = users.map(u => {
-      if (u.id === selectedUser.id) {
-        return {
-          ...u,
-          adminBankWireInfo: bankWireInfo,
-          wireRecipientName,
-          wireRecipientAddress,
-          wireBankName,
-          wireRoutingNumber,
-          wireAccountNumber
-        };
-      }
-      return u;
-    });
-    saveUsers(updatedUsers);
-    alert("Bank wire instructions updated!");
-    closeModal();
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        admin_bank_wire_info: bankWireInfo,
+        wire_recipient_name: wireRecipientName,
+        wire_recipient_address: wireRecipientAddress,
+        wire_bank_name: wireBankName,
+        wire_routing_number: wireRoutingNumber,
+        wire_account_number: wireAccountNumber
+      })
+      .eq("id", selectedUser.id);
+
+    if (error) {
+      alert(`Error updating wire details: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+      alert("Bank wire instructions updated!");
+      closeModal();
+    }
   };
 
   // Transaction Actions
-  const handleApproveTransaction = (userId, txnId) => {
-    const updatedUsers = users.map(u => {
-      if (u.id === userId) {
-        let newBalance = parseFloat(u.portfolioBalance) || 0;
-        let newPending = parseFloat(u.pendingWithdrawal) || 0;
-        let newTotalDeposits = parseFloat(u.totalDeposits) || 0;
+  const handleApproveTransaction = async (userId, txnId) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    const txn = user.userTransactionsList.find(t => t.id === txnId);
+    if (!txn) return;
 
-        const updatedTxns = u.userTransactionsList.map(t => {
-          if (t.id === txnId && t.status === "Pending") {
-            if (t.type === "deposit") {
-              newBalance += parseFloat(t.amount) || 0;
-              newTotalDeposits += parseFloat(t.amount) || 0;
-            } else if (t.type === "withdrawal") {
-              newPending = Math.max(0, newPending - (parseFloat(t.amount) || 0)); // Already deducted from balance during request
-            }
-            return { ...t, status: "Completed" };
-          }
-          return t;
-        });
+    let newBalance = parseFloat(user.portfolioBalance) || 0;
+    let newPending = parseFloat(user.pendingWithdrawal) || 0;
+    let newTotalDeposits = parseFloat(user.totalDeposits) || 0;
 
-        return { 
-          ...u, 
-          portfolioBalance: newBalance, 
-          pendingWithdrawal: newPending,
-          totalDeposits: newTotalDeposits,
-          userTransactionsList: updatedTxns 
-        };
-      }
-      return u;
-    });
-    saveUsers(updatedUsers);
+    if (txn.type === "deposit") {
+      newBalance += parseFloat(txn.amount) || 0;
+      newTotalDeposits += parseFloat(txn.amount) || 0;
+    } else if (txn.type === "withdrawal") {
+      newPending = Math.max(0, newPending - (parseFloat(txn.amount) || 0));
+    }
+
+    const { error: txnErr } = await supabase
+      .from("transactions")
+      .update({ status: "Completed" })
+      .eq("reference_code", txnId)
+      .eq("user_id", userId);
+
+    if (txnErr) {
+      return alert(`Error approving transaction: ${txnErr.message}`);
+    }
+
+    const { error: profileErr } = await supabase
+      .from("profiles")
+      .update({
+        portfolio_balance: newBalance,
+        pending_withdrawal: newPending,
+        total_deposits: newTotalDeposits
+      })
+      .eq("id", userId);
+
+    if (profileErr) {
+      alert(`Error updating profile balance: ${profileErr.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+    }
   };
 
-  const handleDeclineTransaction = (userId, txnId) => {
-    const updatedUsers = users.map(u => {
-      if (u.id === userId) {
-        let newBalance = parseFloat(u.portfolioBalance) || 0;
-        let newPending = parseFloat(u.pendingWithdrawal) || 0;
+  const handleDeclineTransaction = async (userId, txnId) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    const txn = user.userTransactionsList.find(t => t.id === txnId);
+    if (!txn) return;
 
-        const updatedTxns = u.userTransactionsList.map(t => {
-          if (t.id === txnId && t.status === "Pending") {
-            if (t.type === "withdrawal") {
-              // Refund the balance if declined
-              newBalance += parseFloat(t.amount) || 0;
-              newPending = Math.max(0, newPending - (parseFloat(t.amount) || 0));
-            }
-            return { ...t, status: "Declined" };
-          }
-          return t;
-        });
+    let newBalance = parseFloat(user.portfolioBalance) || 0;
+    let newPending = parseFloat(user.pendingWithdrawal) || 0;
 
-        return { ...u, portfolioBalance: newBalance, pendingWithdrawal: newPending, userTransactionsList: updatedTxns };
+    if (txn.type === "withdrawal") {
+      newBalance += parseFloat(txn.amount) || 0;
+      newPending = Math.max(0, newPending - (parseFloat(txn.amount) || 0));
+    }
+
+    const { error: txnErr } = await supabase
+      .from("transactions")
+      .update({ status: "Declined" })
+      .eq("reference_code", txnId)
+      .eq("user_id", userId);
+
+    if (txnErr) {
+      return alert(`Error declining transaction: ${txnErr.message}`);
+    }
+
+    if (txn.type === "withdrawal") {
+      const { error: profileErr } = await supabase
+        .from("profiles")
+        .update({
+          portfolio_balance: newBalance,
+          pending_withdrawal: newPending
+        })
+        .eq("id", userId);
+
+      if (profileErr) {
+        alert(`Error refunding profile balance: ${profileErr.message}`);
+        return;
       }
-      return u;
-    });
-    saveUsers(updatedUsers);
+    }
+
+    await loadData();
+    broadcastAdminAction("users-updated");
   };
+
   // Plan Actions
-  const handleSavePlan = (e) => {
+  const handleSavePlan = async (e) => {
     e.preventDefault();
-    const planData = {
-      ...planForm,
-      minDeposit: planForm.depositType === "fixed"
-        ? parseFloat(planForm.fixedAmount) || 0
-        : parseFloat(planForm.minDeposit) || 0,
-      maxDeposit: planForm.depositType === "range"
-        ? parseFloat(planForm.maxDeposit) || 0
-        : null,
-      depositType: planForm.depositType,
-      fixedAmount: planForm.depositType === "fixed" ? parseFloat(planForm.fixedAmount) || 0 : null,
+    const minDepositVal = planForm.depositType === "fixed"
+      ? parseFloat(planForm.fixedAmount) || 0
+      : parseFloat(planForm.minDeposit) || 0;
+    const maxDepositVal = planForm.depositType === "range"
+      ? parseFloat(planForm.maxDeposit) || 0
+      : null;
+    const fixedAmountVal = planForm.depositType === "fixed" ? parseFloat(planForm.fixedAmount) || 0 : null;
+
+    const dbPlan = {
+      name: planForm.name,
+      roi: planForm.roi,
+      min_deposit: minDepositVal,
+      max_deposit: maxDepositVal,
+      deposit_type: planForm.depositType,
+      fixed_amount: fixedAmountVal,
       duration: planForm.duration
     };
+
     if (activeModal === "newPlan") {
-      const newPlan = { ...planData, id: `plan-${Date.now()}` };
-      savePlans([...plans, newPlan]);
+      const planId = `plan-${Date.now()}`;
+      const { error } = await supabase
+        .from("investment_plans")
+        .insert([{ id: planId, ...dbPlan }]);
+
+      if (error) {
+        alert(`Error creating plan: ${error.message}`);
+      } else {
+        await loadData();
+        broadcastAdminAction("users-updated");
+        closeModal();
+      }
     } else {
-      const updatedPlans = plans.map(p => p.id === planForm.id ? planData : p);
-      savePlans(updatedPlans);
+      const { error } = await supabase
+        .from("investment_plans")
+        .update(dbPlan)
+        .eq("id", planForm.id);
+
+      if (error) {
+        alert(`Error updating plan: ${error.message}`);
+      } else {
+        await loadData();
+        broadcastAdminAction("users-updated");
+        closeModal();
+      }
     }
-    closeModal();
   };
 
-  const handleDeletePlan = (planId) => {
+  const handleDeletePlan = async (planId) => {
     if (!confirm("Are you sure you want to delete this investment plan?")) return;
-    const updatedPlans = plans.filter(p => p.id !== planId);
-    savePlans(updatedPlans);
+    const { error } = await supabase
+      .from("investment_plans")
+      .delete()
+      .eq("id", planId);
+
+    if (error) {
+      alert(`Error deleting plan: ${error.message}`);
+    } else {
+      await loadData();
+      broadcastAdminAction("users-updated");
+    }
   };
 
   // Helpers
@@ -635,7 +807,23 @@ export default function AdminDashboard() {
                 }} 
               />
             </div>
-            <button className="admin-btn admin-btn-primary" onClick={() => alert("Telegram settings saved successfully!")}>
+            <button className="admin-btn admin-btn-primary" onClick={async () => {
+              const { error } = await supabase
+                .from("global_settings")
+                .upsert({
+                  id: 1,
+                  telegram_bot_token: telegramBotToken,
+                  telegram_chat_id: telegramChatId
+                });
+              if (error) {
+                alert(`Error saving telegram settings: ${error.message}`);
+              } else {
+                localStorage.setItem("telegramBotToken", telegramBotToken);
+                localStorage.setItem("telegramChatId", telegramChatId);
+                alert("Telegram settings saved successfully to Supabase!");
+                await loadData();
+              }
+            }}>
               Save Configuration
             </button>
           </div>
