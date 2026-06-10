@@ -527,7 +527,7 @@ export default function ClientShell({ children }) {
               </li>
               <li>
                 <LucideIcon name="mail" className="footer-icon" />
-                <span>Mail: support@example.com</span>
+                <span>Mail: apexvest.inc@gmail.com</span>
               </li>
             </ul>
           </div>

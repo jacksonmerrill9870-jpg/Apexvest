@@ -1474,15 +1474,7 @@ export default function Dashboard() {
           </ul>
         </nav>
 
-        {/* Sidebar promo card */}
-        <div className="sidebar-promo-card">
-          <div className="promo-icon-wrapper">
-            <LucideIcon name="gift" />
-          </div>
-          <h4>Invite & Earn</h4>
-          <p>Invite your friends and earn rewards.</p>
-          <button className="btn btn-filled btn-small w-full" onClick={() => alert("Referral link copied to clipboard!")}>Invite Now</button>
-        </div>
+
       </aside>
 
       {/* 2. Main Content Board */}
@@ -1908,14 +1900,7 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* VIP Elite Promo Card */}
-                <div className="upgrade-premium-banner">
-                  <div className="upgrade-content">
-                    <h3>Upgrade to VIP Elite</h3>
-                    <p>Unlock premium algorithmic leverage, direct account brokers, and up to 35% compound returns.</p>
-                    <button className="btn btn-filled w-full" onClick={() => alert("Connecting to VIP Elite broker desk...")}>Contact Broker Desk</button>
-                  </div>
-                </div>
+
               </div>
             </div>
           </>
@@ -3113,7 +3098,7 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", textTransform: "uppercase", fontWeight: "700" }}>Direct Email</span>
-                      <strong style={{ fontSize: "13px", color: "#0f172a" }}>support@apexvest.com</strong>
+                      <strong style={{ fontSize: "13px", color: "#0f172a" }}>apexvest.inc@gmail.com</strong>
                     </div>
                   </div>
 
