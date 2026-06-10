@@ -3619,3 +3619,82 @@ button {
     font-size: 11px !important;
 }
 
+/* ==========================================================================
+   Interactive Support FAQ Accordion & Chatbot Styling
+   ========================================================================== */
+
+/* FAQ Accordion Styling */
+.faq-item {
+    transition: all 0.3s ease;
+    background-color: #ffffff;
+}
+
+.faq-item:hover {
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.faq-item.open {
+    border-color: #2563eb !important;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.06);
+}
+
+/* Chatbot Suggestion Chips */
+.chat-chip:hover {
+    background-color: #e2e8f0 !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* Chatbot Toggle Button Animations */
+.chatbot-toggle-btn:hover {
+    transform: scale(1.08);
+}
+
+.chatbot-toggle-btn:active {
+    transform: scale(0.95);
+}
+
+/* Chatbot Typing Indicator Animations */
+@keyframes bounce {
+    0%, 80%, 100% { 
+        transform: translateY(0); 
+    }
+    40% { 
+        transform: translateY(-6px); 
+    }
+}
+
+.typing-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #94a3b8;
+    animation: bounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+/* Slide Up Animation for Chat Window */
+@keyframes chatSlideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.chatbot-window {
+    animation: chatSlideUp 0.25s ease-out forwards;
+}
+

@@ -87,6 +87,63 @@ export default function Dashboard() {
   const [notificationsList, setNotificationsList] = useState([]);
   const initialSyncCompleted = useRef(false);
 
+  // Support FAQ & Chatbot States
+  const [activeFaqIndex, setActiveFaqIndex] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState([
+    { id: 1, sender: "bot", text: "Hello! I'm the Apexvest AI Assistant. How can I help you with your investments today?", time: "Just now" }
+  ]);
+  const [isBotTyping, setIsBotTyping] = useState(false);
+
+  const handleSendChatMessage = (e, customText = null) => {
+    if (e) e.preventDefault();
+    const textToSend = customText || chatInput;
+    if (!textToSend.trim()) return;
+
+    const userMsg = {
+      id: Date.now(),
+      sender: "user",
+      text: textToSend,
+      time: "Just now"
+    };
+
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatInput("");
+    setIsBotTyping(true);
+
+    setTimeout(() => {
+      setIsBotTyping(false);
+      let replyText = "";
+      const query = textToSend.toLowerCase();
+
+      if (query.includes("start") || query.includes("how to invest") || query.includes("how do i start")) {
+        replyText = "Creating an account is simple. Fund your wallet or investment account, and choose an investment plan that matches your financial goals and risk tolerance. You can deposit funds via Bank Wire, Bitcoin, or USDT.";
+      } else if (query.includes("safe") || query.includes("security") || query.includes("protect")) {
+        replyText = "We use industry-standard security measures, including data encryption, secure payment processing, and account protection features. Additionally, customer funds are held according to applicable financial regulations and compliance standards.";
+      } else if (query.includes("minimum") || query.includes("limit") || query.includes("least")) {
+        replyText = "The minimum investment amount depends on the investment product. Some plans may allow investments from as little as $5,000, while others may require a higher minimum contribution.";
+      } else if (query.includes("withdraw") || query.includes("cashout") || query.includes("refund")) {
+        replyText = "Withdrawal rules vary by investment type. Flexible investment plans allow withdrawals at any time, while fixed-term investments may require you to wait until the maturity date or incur early withdrawal penalties.";
+      } else if (query.includes("return") || query.includes("calculate") || query.includes("profit") || query.includes("roi")) {
+        replyText = "Returns are based on the performance of the selected investment product. Depending on the investment type, returns may be fixed, variable, or linked to market performance. Detailed return projections and historical performance are available on each investment page.";
+      } else if (query.includes("fee") || query.includes("charge") || query.includes("hidden")) {
+        replyText = "We believe in transparency. Any applicable management fees, transaction fees, or withdrawal fees are clearly displayed before you invest. There are no hidden charges.";
+      } else if (query.includes("hello") || query.includes("hi") || query.includes("hey") || query.includes("help")) {
+        replyText = "Hi there! I'm here to help. You can ask me about dynamic plans, deposit/withdrawal options, security clearance, or click one of the suggested FAQ actions below.";
+      } else {
+        replyText = "I'm sorry, I didn't quite catch that. Could you try rephrasing? Alternatively, you can click on one of the suggested FAQ queries below to get immediate answers.";
+      }
+
+      setChatMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        sender: "bot",
+        text: replyText,
+        time: "Just now"
+      }]);
+    }, 1000);
+  };
+
   const getNotificationIconDetails = (type) => {
     switch (type) {
       case "welcome":
@@ -1411,8 +1468,8 @@ export default function Dashboard() {
             <li className={activeView === "settings" ? "active" : ""}>
               <a href="#" onClick={(e) => { e.preventDefault(); setActiveView("settings"); setIsMobileMenuOpen(false); }}><LucideIcon name="settings" /> <span>Settings</span></a>
             </li>
-            <li>
-              <a href="#" onClick={(e) => { e.preventDefault(); setActiveView("dashboard"); setIsMobileMenuOpen(false); }}><LucideIcon name="help-circle" /> <span>Support</span></a>
+            <li className={activeView === "support" ? "active" : ""}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setActiveView("support"); setIsMobileMenuOpen(false); }}><LucideIcon name="help-circle" /> <span>Support</span></a>
             </li>
           </ul>
         </nav>
@@ -2950,7 +3007,300 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {activeView === "support" && (
+          <div style={{ marginTop: "24px" }}>
+            <div className="dashboard-greeting" style={{ marginBottom: "24px" }}>
+              <h1 style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                <a href="#" onClick={(e) => { e.preventDefault(); setActiveView("dashboard"); }} style={{ color: "#94a3b8", display: "inline-flex", alignItems: "center" }}><LucideIcon name="arrow-left" style={{ width: "24px", height: "24px" }} /></a>
+                <span>Platform Help & Support</span>
+              </h1>
+              <p>Review frequently asked questions or open a direct dialogue channel with our brokers.</p>
+            </div>
+
+            <div className="middle-layout-grid">
+              {/* FAQ Accordion Section */}
+              <div className="dashboard-panel" style={{ padding: "24px", border: "1px solid #eef0f3" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a", margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <LucideIcon name="help-circle" style={{ color: "#2563eb" }} /> Frequently Asked Questions
+                </h3>
+
+                <div className="faq-accordion-container" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {[
+                    {
+                      q: "1. How do I start investing on the platform?",
+                      a: "Creating an account is simple. Fund your wallet or investment account, and choose an investment plan that matches your financial goals and risk tolerance."
+                    },
+                    {
+                      q: "2. Is my money safe on the platform?",
+                      a: "We use industry-standard security measures, including data encryption, secure payment processing, and account protection features. Additionally, customer funds are held according to applicable financial regulations and compliance standards."
+                    },
+                    {
+                      q: "3. What is the minimum amount I can invest?",
+                      a: "The minimum investment amount depends on the investment product. Some plans may allow investments from as little as $5,000, while others may require a higher minimum contribution."
+                    },
+                    {
+                      q: "4. Can I withdraw my investment at any time?",
+                      a: "Withdrawal rules vary by investment type. Flexible investment plans allow withdrawals at any time, while fixed-term investments may require you to wait until the maturity date or incur early withdrawal penalties."
+                    },
+                    {
+                      q: "5. How are investment returns calculated?",
+                      a: "Returns are based on the performance of the selected investment product. Depending on the investment type, returns may be fixed, variable, or linked to market performance. Detailed return projections and historical performance are available on each investment page."
+                    },
+                    {
+                      q: "6. Are there any fees or hidden charges?",
+                      a: "We believe in transparency. Any applicable management fees, transaction fees, or withdrawal fees are clearly displayed before you invest. There are no hidden charges."
+                    }
+                  ].map((faq, idx) => {
+                    const isOpen = activeFaqIndex === idx;
+                    return (
+                      <div key={idx} className={`faq-item ${isOpen ? "open" : ""}`} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden" }}>
+                        <button
+                          onClick={() => setActiveFaqIndex(isOpen ? null : idx)}
+                          style={{
+                            width: "100%",
+                            padding: "16px",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            background: isOpen ? "#f8fafc" : "#fff",
+                            border: "none",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            fontSize: "13.5px",
+                            color: isOpen ? "#2563eb" : "#0f172a",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          <span>{faq.q}</span>
+                          <LucideIcon name="chevron-down" style={{ width: "16px", height: "16px", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                        </button>
+                        {isOpen && (
+                          <div style={{ padding: "16px", background: "#fff", fontSize: "13px", color: "#475569", borderTop: "1px solid #e2e8f0", lineHeight: "1.6" }}>
+                            {faq.a}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Direct Brokerage Contact Section */}
+              <div className="dashboard-panel" style={{ height: "fit-content", padding: "24px", border: "1px solid #eef0f3" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a", margin: "0 0 16px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <LucideIcon name="mail" style={{ color: "#2563eb" }} /> Broker Direct Line
+                </h3>
+                <p style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.5", marginBottom: "20px" }}>
+                  For institutional accounts, custom allocations, or complex clearing requests, get in touch with our Genevan brokerage desk.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    <div style={{ backgroundColor: "#eff6ff", color: "#2563eb", padding: "10px", borderRadius: "8px" }}>
+                      <LucideIcon name="phone" style={{ width: "18px", height: "18px" }} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", textTransform: "uppercase", fontWeight: "700" }}>Broker Hotlines</span>
+                      <strong style={{ fontSize: "13px", color: "#0f172a" }}>+1 (803) 398-3209</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    <div style={{ backgroundColor: "#f0fdf4", color: "#16a34a", padding: "10px", borderRadius: "8px" }}>
+                      <LucideIcon name="mail" style={{ width: "18px", height: "18px" }} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", textTransform: "uppercase", fontWeight: "700" }}>Direct Email</span>
+                      <strong style={{ fontSize: "13px", color: "#0f172a" }}>support@apexvest.com</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    <div style={{ backgroundColor: "#fdf2f8", color: "#db2777", padding: "10px", borderRadius: "8px" }}>
+                      <LucideIcon name="globe" style={{ width: "18px", height: "18px" }} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", textTransform: "uppercase", fontWeight: "700" }}>Headquarters Location</span>
+                      <strong style={{ fontSize: "13px", color: "#0f172a" }}>Geneva, Switzerland</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid #f1f5f9" }}>
+                  <button className="btn btn-filled w-full" style={{ padding: "10px", borderRadius: "8px", fontSize: "13px" }} onClick={() => setIsChatOpen(true)}>
+                    Start Live AI Chat Support
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Floating AI Chatbot Widget */}
+      <div className="chatbot-floating-wrapper" style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+        {isChatOpen && (
+          <div className="chatbot-window" style={{
+            width: "350px",
+            height: "480px",
+            backgroundColor: "#fff",
+            borderRadius: "16px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+            border: "1px solid #eef0f3",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            marginBottom: "16px"
+          }}>
+            {/* Header */}
+            <div style={{
+              background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+              padding: "16px",
+              color: "#fff",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "#e2ff3b", display: "flex", alignItems: "center", justifyContent: "center", color: "#0f172a", fontWeight: "800", fontSize: "12px" }}>
+                  AV
+                </div>
+                <div>
+                  <span style={{ fontSize: "13px", fontWeight: "700", display: "block" }}>Apexvest AI Assistant</span>
+                  <span style={{ fontSize: "10px", color: "#10b981", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10b981" }}></span> Online
+                  </span>
+                </div>
+              </div>
+              <button onClick={() => setIsChatOpen(false)} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: "4px" }}>
+                <LucideIcon name="x" style={{ width: "18px", height: "18px" }} />
+              </button>
+            </div>
+
+            {/* Messages Feed */}
+            <div style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", backgroundColor: "#f8fafc" }}>
+              {chatMessages.map(msg => (
+                <div key={msg.id} style={{
+                  alignSelf: msg.sender === "user" ? "flex-end" : "flex-start",
+                  maxWidth: "80%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: msg.sender === "user" ? "flex-end" : "flex-start"
+                }}>
+                  <div style={{
+                    backgroundColor: msg.sender === "user" ? "#2563eb" : "#fff",
+                    color: msg.sender === "user" ? "#fff" : "#0f172a",
+                    padding: "10px 14px",
+                    borderRadius: msg.sender === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                    fontSize: "12.5px",
+                    lineHeight: "1.45",
+                    boxShadow: msg.sender === "user" ? "none" : "0 1px 3px rgba(0,0,0,0.05)",
+                    border: msg.sender === "user" ? "none" : "1px solid #eef0f3"
+                  }}>
+                    {msg.text}
+                  </div>
+                  <span style={{ fontSize: "9px", color: "#94a3b8", marginTop: "4px" }}>{msg.time}</span>
+                </div>
+              ))}
+              {isBotTyping && (
+                <div style={{ alignSelf: "flex-start", display: "flex", gap: "4px", backgroundColor: "#fff", padding: "10px 14px", borderRadius: "14px 14px 14px 2px", border: "1px solid #eef0f3", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                  <span className="typing-dot"></span>
+                  <span className="typing-dot"></span>
+                  <span className="typing-dot"></span>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Suggestions */}
+            <div style={{ padding: "8px 12px", borderTop: "1px solid #eef0f3", backgroundColor: "#fff", display: "flex", gap: "6px", flexWrap: "wrap", overflowX: "auto" }}>
+              {[
+                { label: "🚀 Start?", query: "How do I start investing?" },
+                { label: "🛡️ Safe?", query: "Is my money safe?" },
+                { label: "💵 Limits?", query: "What is the minimum investment?" },
+                { label: "💳 Fees?", query: "Are there any fees?" }
+              ].map((chip, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => handleSendChatMessage(e, chip.query)}
+                  style={{
+                    backgroundColor: "#f1f5f9",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "16px",
+                    padding: "4px 10px",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#475569",
+                    cursor: "pointer",
+                    transition: "all 0.2s"
+                  }}
+                  className="chat-chip"
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chat Input Footer */}
+            <form onSubmit={handleSendChatMessage} style={{ padding: "12px", borderTop: "1px solid #eef0f3", display: "flex", gap: "8px", backgroundColor: "#fff" }}>
+              <input
+                type="text"
+                placeholder="Ask chatbot..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  fontSize: "12.5px",
+                  outline: "none"
+                }}
+              />
+              <button type="submit" style={{
+                backgroundColor: "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                padding: "8px 12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}>
+                <LucideIcon name="arrow-up-right" style={{ width: "16px", height: "16px" }} />
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Toggle Button */}
+        <button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          style={{
+            width: "56px",
+            height: "56px",
+            borderRadius: "50%",
+            backgroundColor: "#2563eb",
+            color: "#fff",
+            border: "none",
+            boxShadow: "0 4px 15px rgba(37,99,235,0.4)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "transform 0.2s"
+          }}
+          className="chatbot-toggle-btn"
+        >
+          {isChatOpen ? (
+            <LucideIcon name="x" style={{ width: "24px", height: "24px" }} />
+          ) : (
+            <LucideIcon name="help-circle" style={{ width: "24px", height: "24px" }} />
+          )}
+        </button>
+      </div>
     </div>
   );
 }
