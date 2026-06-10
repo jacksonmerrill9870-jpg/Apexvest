@@ -3,7 +3,7 @@ import LucideIcon from "@/components/LucideIcon";
 import { supabase } from "@/lib/supabaseClient";
 
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Dashboard() {
@@ -85,6 +85,64 @@ export default function Dashboard() {
   // Notifications State
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationsList, setNotificationsList] = useState([]);
+  const initialSyncCompleted = useRef(false);
+
+  const getNotificationIconDetails = (type) => {
+    switch (type) {
+      case "welcome":
+        return { icon: "user-check", bg: "#eff6ff", color: "#2563eb" };
+      case "profit":
+        return { icon: "trending-up", bg: "#f0fdf4", color: "#16a34a" };
+      case "deposit":
+        return { icon: "arrow-up-right", bg: "#eff6ff", color: "#2563eb" };
+      case "withdrawal":
+        return { icon: "arrow-down-left", bg: "#fef2f2", color: "#ef4444" };
+      case "success":
+        return { icon: "check-circle", bg: "#f0fdf4", color: "#16a34a" };
+      case "alert":
+        return { icon: "info", bg: "#fffbeb", color: "#d97706" };
+      case "payout":
+        return { icon: "gift", bg: "#faf5ff", color: "#9333ea" };
+      default:
+        return { icon: "bell", bg: "#f8fafc", color: "#64748b" };
+    }
+  };
+
+  const addNotification = (type, message) => {
+    const cid = localStorage.getItem("currentUserId") || "demo-id";
+    const newNotif = {
+      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: type,
+      message: message,
+      time: "Just now",
+      unread: true
+    };
+    
+    setNotificationsList(prev => {
+      const updated = [newNotif, ...prev];
+      localStorage.setItem(`notifications_${cid}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const markAsRead = (id) => {
+    const cid = localStorage.getItem("currentUserId") || "demo-id";
+    setNotificationsList(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, unread: false } : n);
+      localStorage.setItem(`notifications_${cid}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const markAllAsRead = (e) => {
+    if (e) e.stopPropagation();
+    const cid = localStorage.getItem("currentUserId") || "demo-id";
+    setNotificationsList(prev => {
+      const updated = prev.map(n => ({ ...n, unread: false }));
+      localStorage.setItem(`notifications_${cid}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Destination payout fields (bind directly to page input states)
   const [withdrawAddress, setWithdrawAddress] = useState("");
@@ -210,11 +268,39 @@ export default function Dashboard() {
         localStorage.setItem("telegramChatId", settings.telegram_chat_id);
       }
 
+      const newBalance = parseFloat(profile.portfolio_balance || 0);
+
+      // Wallet Balance Adjustment Detector
+      if (initialSyncCompleted.current) {
+        const diff = newBalance - baseAmount;
+        if (Math.abs(diff) > 0.01) {
+          const changeType = diff > 0 ? "credited" : "debited";
+          
+          let matchedTxn = false;
+          if (txns) {
+            const prevTxnsStr = localStorage.getItem("userTransactionsList");
+            const prevTxns = prevTxnsStr ? JSON.parse(prevTxnsStr) : [];
+            txns.forEach(t => {
+              const oldT = prevTxns.find(o => o.id === t.reference_code);
+              if (oldT && oldT.status === "Pending" && t.status === "Completed") {
+                if (Math.abs(parseFloat(t.amount || 0) - Math.abs(diff)) < 0.01) {
+                  matchedTxn = true;
+                }
+              }
+            });
+          }
+          
+          if (!matchedTxn) {
+            addNotification("success", `💼 Wallet Balance: Your cash balance has been ${changeType} by $${Math.abs(diff).toLocaleString('en-US', { minimumFractionDigits: 2 })}.`);
+          }
+        }
+      }
+
       setUserName(profile.user_name || user.email.split("@")[0]);
       setFormUserName(profile.user_name || user.email.split("@")[0]);
       setFormUserEmail(user.email);
       setSelectedPlan(profile.selected_plan || "crypto");
-      setBaseAmount(parseFloat(profile.portfolio_balance || 0));
+      setBaseAmount(newBalance);
       setTotalDeposits(parseFloat(profile.total_deposits || 0));
       setTotalWithdrawals(parseFloat(profile.total_withdrawals || 0));
       setPendingWithdrawal(parseFloat(profile.pending_withdrawal || 0));
@@ -247,6 +333,29 @@ export default function Dashboard() {
           receipt: t.receipt || "",
           receiptName: t.receipt_name || ""
         }));
+
+        // Transaction Status Transition Detector
+        if (initialSyncCompleted.current) {
+          const prevTxnsStr = localStorage.getItem("userTransactionsList");
+          if (prevTxnsStr) {
+            try {
+              const prevTxns = JSON.parse(prevTxnsStr);
+              mappedTxns.forEach(newT => {
+                const oldT = prevTxns.find(o => o.id === newT.id);
+                if (oldT && oldT.status === "Pending" && newT.status !== "Pending") {
+                  if (newT.status === "Completed") {
+                    addNotification("success", `🎉 Request Approved: Your ${newT.type} request of $${newT.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been approved!`);
+                  } else if (newT.status === "Declined") {
+                    addNotification("alert", `⚠️ Request Declined: Your ${newT.type} request of $${newT.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} was declined.`);
+                  }
+                }
+              });
+            } catch (e) {
+              console.error("Error comparing transactions:", e);
+            }
+          }
+        }
+
         setTransactionsList(mappedTxns);
         localStorage.setItem("userTransactionsList", JSON.stringify(mappedTxns));
       }
@@ -266,6 +375,8 @@ export default function Dashboard() {
       localStorage.setItem("wireBankName", profile.wire_bank_name || "");
       localStorage.setItem("wireRoutingNumber", profile.wire_routing_number || "");
       localStorage.setItem("wireAccountNumber", profile.wire_account_number || "");
+      
+      initialSyncCompleted.current = true;
     } catch (e) {
       console.error(e);
     }
@@ -275,6 +386,15 @@ export default function Dashboard() {
     const session = localStorage.getItem("isLoggedIn");
     if (session === "true") {
       setIsLoggedIn(true);
+      const storedName = localStorage.getItem("userName");
+      if (storedName) {
+        setUserName(storedName);
+        setFormUserName(storedName);
+      }
+      const storedEmail = localStorage.getItem("userEmail");
+      if (storedEmail) {
+        setFormUserEmail(storedEmail);
+      }
     }
     syncDataFromSupabase();
 
@@ -330,6 +450,93 @@ export default function Dashboard() {
     setDepositReceiptName("");
     setDepositReceiptFile(null);
   }, [depositMethod]);
+
+  // Initialize notifications: welcome message & historical profit yield notifications
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const cid = localStorage.getItem("currentUserId") || "demo-id";
+    const stored = localStorage.getItem(`notifications_${cid}`);
+    let list = [];
+    if (stored) {
+      try {
+        list = JSON.parse(stored);
+      } catch (e) {}
+    }
+
+    const hasWelcome = list.some(n => n.type === "welcome");
+    if (!hasWelcome) {
+      list.unshift({
+        id: `welcome-${cid}`,
+        type: "welcome",
+        message: `Welcome to Apexvest! We are thrilled to have you here. Explore our premium investment plans to begin earning yield allocations.`,
+        time: "Just now",
+        unread: true
+      });
+    }
+
+    // Pre-populate daily/weekly/monthly profit returns if they have positive funds but no profit notifications yet
+    const hasDaily = list.some(n => n.id === `profit-daily-${cid}`);
+    const hasWeekly = list.some(n => n.id === `profit-weekly-${cid}`);
+    const hasMonthly = list.some(n => n.id === `profit-monthly-${cid}`);
+
+    const balance = baseAmount || parseFloat(localStorage.getItem("portfolioBalance") || "0");
+    const activeCost = parseFloat(localStorage.getItem("activePlanInvestedAmount") || "0");
+    const activeROI = activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.40 : 0.25;
+
+    const referenceAmount = activeCost > 0 ? activeCost : balance;
+
+    if (referenceAmount > 100) {
+      const dailyYield = referenceAmount * (activeCost > 0 ? (activeROI / 30) : 0.005);
+      const weeklyYield = referenceAmount * (activeCost > 0 ? (activeROI / 4) : 0.035);
+      const monthlyYield = referenceAmount * (activeCost > 0 ? activeROI : 0.15);
+
+      if (!hasMonthly) {
+        list.push({
+          id: `profit-monthly-${cid}`,
+          type: "profit",
+          message: `📊 Monthly Yield Credited: Your assets successfully generated a monthly return rate of $${monthlyYield.toLocaleString('en-US', { minimumFractionDigits: 2 })} (+${(activeCost > 0 ? (activeROI * 100) : 15).toFixed(1)}%).`,
+          time: "1 month ago",
+          unread: true
+        });
+      }
+      if (!hasWeekly) {
+        list.push({
+          id: `profit-weekly-${cid}`,
+          type: "profit",
+          message: `📈 Weekly Profit Return: Compound yield of $${weeklyYield.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been settled into your account ledger.`,
+          time: "1 week ago",
+          unread: true
+        });
+      }
+      if (!hasDaily) {
+        list.push({
+          id: `profit-daily-${cid}`,
+          type: "profit",
+          message: `💰 Daily Allocation Settled: Today's algorithmic leverage returns added $${dailyYield.toLocaleString('en-US', { minimumFractionDigits: 2 })} (+${(activeCost > 0 ? (activeROI / 30 * 100) : 0.5).toFixed(2)}%) to your balance.`,
+          time: "1 day ago",
+          unread: true
+        });
+      }
+    }
+
+    setNotificationsList(list);
+    localStorage.setItem(`notifications_${cid}`, JSON.stringify(list));
+  }, [isLoggedIn, baseAmount, activeInvestmentPlan]);
+
+  // Live profit tick notifications simulator (ticks a new daily profit notification every 30s when investment is active)
+  useEffect(() => {
+    if (!activeInvestmentPlan || investmentTimeRemaining <= 0) return;
+
+    const interval = setInterval(() => {
+      const cost = parseFloat(localStorage.getItem("activePlanInvestedAmount") || "500");
+      const activeROI = activeInvestmentPlan === "diamond" ? 0.20 : 0.40;
+      const mockDailyProfit = cost * (activeROI / 30) * (1 + Math.random() * 0.1);
+      
+      addNotification("profit", `💰 Live Yield Accrual: Accrued daily yield of $${mockDailyProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been generated from your active ${activeInvestmentPlan === "diamond" ? "Diamond" : "Premium"} Plan.`);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [activeInvestmentPlan, investmentTimeRemaining]);
 
   const handleReceiptChange = (e) => {
     const file = e.target.files[0];
@@ -416,6 +623,8 @@ export default function Dashboard() {
     const methodLabel = methodLabels[depositMethod] || "Deposit Transfer";
 
     alert(`Deposit request for $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been submitted and is pending admin approval.`);
+
+    addNotification("deposit", `Pending Deposit: Your deposit request of $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} via ${methodLabel} has been submitted.`);
 
     const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
     const detailString = depositMethod === "bank-wire" ? "Awaiting admin clearance" : depositMethod === "bitcoin" ? "rhueio...9374 Address" : "04dihe...fete Address";
@@ -621,6 +830,8 @@ export default function Dashboard() {
 
     alert(`Withdrawal request of $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been submitted successfully and is now appearing on pending withdrawal.`);
     
+    addNotification("withdrawal", `Pending Withdrawal: Your withdrawal request of $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} via ${methodLabel} has been submitted.`);
+
     // Clear inputs
     setWithdrawAmount("");
     setWithdrawAddress("");
@@ -729,6 +940,9 @@ export default function Dashboard() {
     localStorage.setItem("userTransactionsList", JSON.stringify(updatedTxns));
 
     alert(`Successfully invested $${cost.toLocaleString('en-US', { minimumFractionDigits: 2 })} in the ${plan.name} for a duration of: ${duration}!`);
+    
+    addNotification("payout", `Investment Active: Allocated $${cost.toLocaleString('en-US', { minimumFractionDigits: 2 })} to ${plan.name} for ${duration}.`);
+
     setActiveView("dashboard");
   };
 
@@ -806,6 +1020,8 @@ export default function Dashboard() {
       localStorage.setItem("userTransactionsList", JSON.stringify(updated));
       return updated;
     });
+
+    addNotification("payout", `🎉 Investment Matured! Your ${plan.name} of $${cost.toLocaleString('en-US', { minimumFractionDigits: 2 })} has matured. Payout of $${totalPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been credited.`);
 
     alert(`🎉 Investment Matured!\n\nYour ${plan.name} investment has matured. The principal of $${cost.toLocaleString('en-US', { minimumFractionDigits: 2 })} and profit of $${profitEarned.toLocaleString('en-US', { minimumFractionDigits: 2 })} (total: $${totalPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}) have been credited to your Available Cash.`);
   };
@@ -910,6 +1126,8 @@ export default function Dashboard() {
       localStorage.setItem("userTransactionsList", JSON.stringify(updated));
       return updated;
     });
+
+    addNotification("withdrawal", `Investment Cancelled: Refund of $${refundAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been returned to your wallet balance.`);
 
     alert(`Successfully cancelled your ${plan.name} investment. $${refundAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been refunded to your wallet.`);
     setActiveView("dashboard");
@@ -1232,27 +1450,55 @@ export default function Dashboard() {
                 <div className="notifications-dropdown">
                   <div style={{ padding: "16px", borderBottom: "1px solid #eef0f3", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>Notifications</h4>
-                    <span style={{ fontSize: "11px", color: "#2563eb", cursor: "pointer", fontWeight: "600" }} onClick={() => setNotificationsList(notificationsList.map(n => ({...n, unread: false})))}>Mark all as read</span>
+                    <span style={{ fontSize: "11px", color: "#2563eb", cursor: "pointer", fontWeight: "600" }} onClick={markAllAsRead}>Mark all as read</span>
                   </div>
                   <div style={{ maxHeight: "350px", overflowY: "auto", display: "flex", flexDirection: "column" }}>
-                    {notificationsList.map(notif => (
-                      <div key={notif.id} style={{ padding: "14px 16px", borderBottom: "1px solid #f8fafc", backgroundColor: notif.unread ? "#eff6ff" : "#fff", display: "flex", gap: "12px", alignItems: "flex-start", transition: "background-color 0.2s" }}>
-                        <div style={{ backgroundColor: notif.type === "welcome" ? "#dbeafe" : "#dcfce3", color: notif.type === "welcome" ? "#2563eb" : "#16a34a", padding: "8px", borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <LucideIcon name={notif.type === "welcome" ? "user-check" : "trending-up"} style={{ width: "16px", height: "16px" }} />
-                        </div>
-                        <div>
-                          <p style={{ margin: "0 0 4px", fontSize: "12.5px", color: "#0f172a", lineHeight: "1.4", fontWeight: notif.unread ? "600" : "400" }}>{notif.message}</p>
-                          <span style={{ fontSize: "10.5px", color: "#64748b" }}>{notif.time}</span>
-                        </div>
+                    {notificationsList.length === 0 ? (
+                      <div style={{ padding: "30px 16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                        <LucideIcon name="bell" style={{ width: "24px", height: "24px", margin: "0 auto 8px", color: "#cbd5e1", display: "block" }} />
+                        No notifications yet
                       </div>
-                    ))}
+                    ) : (
+                      notificationsList.map(notif => {
+                        const { icon, bg, color } = getNotificationIconDetails(notif.type);
+                        return (
+                          <div 
+                            key={notif.id} 
+                            onClick={() => markAsRead(notif.id)}
+                            style={{ 
+                              padding: "14px 16px", 
+                              borderBottom: "1px solid #f1f5f9", 
+                              backgroundColor: notif.unread ? "rgba(37, 99, 235, 0.03)" : "#fff", 
+                              display: "flex", 
+                              gap: "12px", 
+                              alignItems: "flex-start", 
+                              transition: "background-color 0.2s",
+                              cursor: "pointer"
+                            }}
+                            className="notification-item"
+                          >
+                            <div style={{ backgroundColor: bg, color: color, padding: "8px", borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <LucideIcon name={icon} style={{ width: "16px", height: "16px" }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: "0 0 4px", fontSize: "12.5px", color: "#0f172a", lineHeight: "1.4", fontWeight: notif.unread ? "600" : "400" }}>{notif.message}</p>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: "10.5px", color: "#94a3b8" }}>{notif.time}</span>
+                                {notif.unread && (
+                                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#2563eb" }}></span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
             </div>
-            <div className="header-icon-btn notification-badge" style={{ cursor: "pointer" }} onClick={() => setActiveView("transactions")}>
+            <div className="header-icon-btn" style={{ cursor: "pointer" }} onClick={() => setActiveView("transactions")}>
               <LucideIcon name="mail" />
-              <span className="icon-badge">2</span>
             </div>
             
             <div className="user-profile-dropdown">

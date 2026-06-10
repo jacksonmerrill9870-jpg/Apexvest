@@ -146,6 +146,17 @@ export default function ClientShell({ children }) {
     const { data, error } = await supabase.auth.signUp({
       email: useremail,
       password: password,
+      options: {
+        data: {
+          user_name: username,
+          username: username,
+          name: username,
+          user_email: useremail,
+          email: useremail,
+          selected_plan: plan,
+          plan: plan
+        }
+      }
     });
 
     if (error) {
@@ -160,19 +171,17 @@ export default function ClientShell({ children }) {
 
     const { error: profileError } = await supabase
       .from("profiles")
-      .insert([
-        {
-          id: data.user.id,
-          user_name: username,
-          user_email: useremail,
-          selected_plan: plan,
-          portfolio_balance: 0,
-          total_deposits: 0,
-          total_withdrawals: 0,
-          pending_withdrawal: 0,
-          total_invested: 0
-        }
-      ]);
+      .upsert({
+        id: data.user.id,
+        user_name: username,
+        user_email: useremail,
+        selected_plan: plan,
+        portfolio_balance: 0,
+        total_deposits: 0,
+        total_withdrawals: 0,
+        pending_withdrawal: 0,
+        total_invested: 0
+      });
 
     if (profileError) {
       console.error("Profile creation error:", profileError);
