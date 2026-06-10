@@ -26,6 +26,8 @@ export default function ClientShell({ children }) {
 
   // Forgot Password State
   const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotPassword, setForgotPassword] = useState("");
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState("");
   const [forgotSuccess, setForgotSuccess] = useState("");
   const [forgotError, setForgotError] = useState("");
 
@@ -212,19 +214,30 @@ export default function ClientShell({ children }) {
     setForgotSuccess("");
     setForgotError("");
 
-    const redirectUrl = typeof window !== "undefined"
-      ? `${window.location.origin}/reset-password`
-      : "http://localhost:3000/reset-password";
+    if (forgotPassword.length < 6) {
+      setForgotError("Password must be at least 6 characters.");
+      return;
+    }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-      redirectTo: redirectUrl,
+    if (forgotPassword !== forgotConfirmPassword) {
+      setForgotError("Passwords do not match.");
+      return;
+    }
+
+    const { data: isSuccess, error } = await supabase.rpc("reset_user_password", {
+      user_email: forgotEmail.trim().toLowerCase(),
+      new_password: forgotPassword
     });
 
     if (error) {
       setForgotError(error.message);
+    } else if (!isSuccess) {
+      setForgotError("No account found with this email address.");
     } else {
-      setForgotSuccess("A password reset link has been sent to your email!");
+      setForgotSuccess("Password reset successfully! You can now log in.");
       setForgotEmail("");
+      setForgotPassword("");
+      setForgotConfirmPassword("");
     }
   };
 
@@ -599,7 +612,7 @@ export default function ClientShell({ children }) {
           <form className={`modal-form ${modalTab === "forgot" ? "active" : ""}`} onSubmit={handleForgotPasswordSubmit}>
             <h2>Reset Password</h2>
             <p className="forgot-password-desc" style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", textAlign: "center", lineHeight: "1.5" }}>
-              Enter your email address below and we will send you a secure link to reset your account password.
+              Enter your account email and your new password to reset it instantly.
             </p>
             {forgotSuccess && (
               <div className="success-banner" style={{ 
@@ -642,9 +655,35 @@ export default function ClientShell({ children }) {
                 />
               </div>
             </div>
-            <button type="submit" className="btn btn-filled w-full btn-large">Send Reset Link</button>
+            <div className="form-group">
+              <label>New Password</label>
+              <div className="input-wrapper">
+                <LucideIcon name="lock" className="input-icon" />
+                <input 
+                  type="password" 
+                  value={forgotPassword}
+                  onChange={(e) => setForgotPassword(e.target.value)}
+                  placeholder="Enter New Password"
+                  required 
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Confirm Password</label>
+              <div className="input-wrapper">
+                <LucideIcon name="lock" className="input-icon" />
+                <input 
+                  type="password" 
+                  value={forgotConfirmPassword}
+                  onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                  placeholder="Confirm New Password"
+                  required 
+                />
+              </div>
+            </div>
+            <button type="submit" className="btn btn-filled w-full btn-large">Reset Password</button>
             <div className="modal-footer-text" style={{ marginTop: "16px", textAlign: "center" }}>
-              Back to <button type="button" className="btn-link" style={{ fontSize: "13px", fontWeight: "600", color: "#2563eb", background: "none", border: "none", cursor: "pointer" }} onClick={() => setModalTab("login")}>login</button>
+              Back to <button type="button" className="btn-link" style={{ fontSize: "13px", fontWeight: "600", color: "#2563eb", background: "none", border: "none", cursor: "pointer" }} onClick={() => { setModalTab("login"); setForgotSuccess(""); setForgotError(""); }}>login</button>
             </div>
           </form>
 
