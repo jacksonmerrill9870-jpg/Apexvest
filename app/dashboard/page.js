@@ -1024,43 +1024,49 @@ export default function Dashboard() {
   // Dynamic chart multipliers and scaling
   const getDynamicChartData = () => {
     const numPoints = getTimelineLabels().length;
-    if (portfolioValue === 0) {
-      return {
-        scaledData: Array(numPoints).fill(0),
-        yMin: -10,
-        yMax: 10,
-        trendText: "0.0%"
-      };
-    }
-    
-    if (profit === 0) {
-      return {
-        scaledData: Array(numPoints).fill(portfolioValue),
-        yMin: portfolioValue * 0.9,
-        yMax: portfolioValue * 1.1,
-        trendText: "0.0%"
-      };
-    }
+    const activeWithdrawals = totalWithdrawals + pendingWithdrawal;
 
-    const growthRate = profit / (portfolioValue - profit);
-    const startMult = 1 / (1 + growthRate);
-    const endMult = 1.0;
-    
     const sData = [];
     for (let i = 0; i < numPoints; i++) {
-      const mult = startMult + (i / (numPoints - 1)) * (endMult - startMult);
-      sData.push(portfolioValue * mult);
+      if (i === 0) {
+        // The chart always starts from $0
+        sData.push(0);
+      } else {
+        const fraction = numPoints > 1 ? i / (numPoints - 1) : 1;
+        
+        // Deposits occur/ramp up quickly early on
+        const depositContribution = totalDeposits * Math.min(1.0, fraction * 1.5);
+        
+        // Profits accrue quadratically as time goes on
+        const profitContribution = profit * Math.pow(fraction, 2);
+        
+        // Withdrawals happen later in the timeline (after the 40% mark)
+        const withdrawalContribution = activeWithdrawals * Math.max(0.0, (fraction - 0.4) / 0.6);
+        
+        // Current value for this point on the timeline
+        const val = Math.max(0, depositContribution + profitContribution - withdrawalContribution);
+        sData.push(val);
+      }
     }
-    
-    const minVal = Math.min(...sData);
-    const maxVal = Math.max(...sData);
-    const range = maxVal - minVal || 1;
-    
+
+    const yMin = 0; // Always start scaling from $0
+    const yMax = Math.max(10, ...sData) * 1.15; // 15% padding above max value
+
+    // Calculate overall percentage trend text
+    let trendPercent = "0.0%";
+    if (totalDeposits > 0) {
+      const netGrowth = portfolioValue - totalDeposits;
+      const rate = netGrowth / totalDeposits;
+      trendPercent = `${rate >= 0 ? "+" : ""}${(rate * 100).toFixed(1)}%`;
+    } else if (portfolioValue > 0) {
+      trendPercent = "+100.0%";
+    }
+
     return {
       scaledData: sData,
-      yMin: minVal - range * 0.1,
-      yMax: maxVal + range * 0.1,
-      trendText: `+${(growthRate * 100).toFixed(1)}%`
+      yMin,
+      yMax,
+      trendText: trendPercent
     };
   };
 
