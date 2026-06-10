@@ -24,6 +24,11 @@ export default function ClientShell({ children }) {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
+  // Forgot Password State
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState("");
+  const [forgotError, setForgotError] = useState("");
+
   // Sync authentication state from localStorage
   useEffect(() => {
     const checkAuth = () => {
@@ -200,6 +205,27 @@ export default function ClientShell({ children }) {
     closeModal();
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
     window.location.href = "/dashboard";
+  };
+
+  const handleForgotPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setForgotSuccess("");
+    setForgotError("");
+
+    const redirectUrl = typeof window !== "undefined"
+      ? `${window.location.origin}/reset-password`
+      : "http://localhost:3000/reset-password";
+
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: redirectUrl,
+    });
+
+    if (error) {
+      setForgotError(error.message);
+    } else {
+      setForgotSuccess("A password reset link has been sent to your email!");
+      setForgotEmail("");
+    }
   };
 
   const handleLogout = async () => {
@@ -514,8 +540,8 @@ export default function ClientShell({ children }) {
           <button className="modal-close" onClick={closeModal}><LucideIcon name="x" /></button>
           
           <div className="modal-tabs">
-            <button className={`modal-tab ${modalTab === "login" ? "active" : ""}`} onClick={() => setModalTab("login")}>Log In</button>
-            <button className={`modal-tab ${modalTab === "signup" ? "active" : ""}`} onClick={() => setModalTab("signup")}>Sign Up</button>
+            <button className={`modal-tab ${modalTab === "login" || modalTab === "forgot" ? "active" : ""}`} onClick={() => { setModalTab("login"); setForgotSuccess(""); setForgotError(""); }}>Log In</button>
+            <button className={`modal-tab ${modalTab === "signup" ? "active" : ""}`} onClick={() => { setModalTab("signup"); setForgotSuccess(""); setForgotError(""); }}>Sign Up</button>
           </div>
 
           <form className={`modal-form ${modalTab === "login" ? "active" : ""}`} onSubmit={handleLoginSubmit}>
@@ -560,7 +586,66 @@ export default function ClientShell({ children }) {
                 />
               </div>
             </div>
+            
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px", marginTop: "-4px" }}>
+              <button type="button" className="btn-link" style={{ fontSize: "13px", fontWeight: "600", color: "#2563eb", background: "none", border: "none", cursor: "pointer" }} onClick={() => setModalTab("forgot")}>
+                Forgot Password?
+              </button>
+            </div>
+
             <button type="submit" className="btn btn-filled w-full btn-large">Log In to Portfolio</button>
+          </form>
+
+          <form className={`modal-form ${modalTab === "forgot" ? "active" : ""}`} onSubmit={handleForgotPasswordSubmit}>
+            <h2>Reset Password</h2>
+            <p className="forgot-password-desc" style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", textAlign: "center", lineHeight: "1.5" }}>
+              Enter your email address below and we will send you a secure link to reset your account password.
+            </p>
+            {forgotSuccess && (
+              <div className="success-banner" style={{ 
+                color: "var(--color-green)", 
+                backgroundColor: "var(--color-green-soft)", 
+                padding: "10px", 
+                borderRadius: "8px", 
+                marginBottom: "15px", 
+                fontSize: "14px", 
+                border: "1px solid rgba(16, 185, 129, 0.2)",
+                textAlign: "center"
+              }}>
+                {forgotSuccess}
+              </div>
+            )}
+            {forgotError && (
+              <div className="error-banner" style={{ 
+                color: "var(--color-red)", 
+                backgroundColor: "var(--color-red-soft)", 
+                padding: "10px", 
+                borderRadius: "8px", 
+                marginBottom: "15px", 
+                fontSize: "14px", 
+                border: "1px solid rgba(255, 23, 68, 0.2)",
+                textAlign: "center"
+              }}>
+                {forgotError}
+              </div>
+            )}
+            <div className="form-group">
+              <label>Email Address</label>
+              <div className="input-wrapper">
+                <LucideIcon name="mail" className="input-icon" />
+                <input 
+                  type="email" 
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="Enter Email Address"
+                  required 
+                />
+              </div>
+            </div>
+            <button type="submit" className="btn btn-filled w-full btn-large">Send Reset Link</button>
+            <div className="modal-footer-text" style={{ marginTop: "16px", textAlign: "center" }}>
+              Back to <button type="button" className="btn-link" style={{ fontSize: "13px", fontWeight: "600", color: "#2563eb", background: "none", border: "none", cursor: "pointer" }} onClick={() => setModalTab("login")}>login</button>
+            </div>
           </form>
 
           <form className={`modal-form ${modalTab === "signup" ? "active" : ""}`} onSubmit={handleSignupSubmit}>
