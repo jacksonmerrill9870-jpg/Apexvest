@@ -322,6 +322,12 @@ export default function Dashboard() {
         .eq("id", user.id)
         .single();
 
+      if (profile && profile.is_approved === false) {
+        handleLogout();
+        alert("Your account has been blocked or is awaiting admin approval.");
+        return;
+      }
+
       if (profileError) {
         console.error("Error fetching Supabase profile:", profileError);
         return;

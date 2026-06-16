@@ -103,6 +103,12 @@ export default function ClientShell({ children }) {
       .eq("id", data.user.id)
       .single();
 
+    if (profile && profile.is_approved === false) {
+      await supabase.auth.signOut();
+      setLoginError("Your account has been blocked or is awaiting admin approval.");
+      return;
+    }
+
     localStorage.setItem("currentUserId", data.user.id);
     localStorage.setItem("userName", profile?.user_name || data.user.email.split("@")[0]);
     localStorage.setItem("userEmail", data.user.email);
@@ -180,7 +186,8 @@ export default function ClientShell({ children }) {
         total_deposits: 0,
         total_withdrawals: 0,
         pending_withdrawal: 0,
-        total_invested: 0
+        total_invested: 0,
+        is_approved: true
       });
 
     if (profileError) {

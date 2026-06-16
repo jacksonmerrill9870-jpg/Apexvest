@@ -99,6 +99,7 @@ export default function AdminDashboard() {
           wireBankName: p.wire_bank_name || "",
           wireRoutingNumber: p.wire_routing_number || "",
           wireAccountNumber: p.wire_account_number || "",
+          isApproved: p.is_approved !== false,
           userTransactionsList: userTxns
         };
       });
@@ -298,6 +299,31 @@ export default function AdminDashboard() {
       await loadData();
       broadcastAdminAction("users-updated");
     }
+  };
+
+  const handleToggleApproval = async (userId, currentStatus) => {
+    const newStatus = !currentStatus;
+    
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_approved: newStatus })
+      .eq("id", userId);
+
+    if (error) {
+      alert(`Error updating approval: ${error.message}`);
+      return;
+    }
+
+    if (newStatus) {
+      try {
+        await supabase.rpc("confirm_user", { user_id: userId });
+      } catch (rpcErr) {
+        console.error("RPC confirm_user error (harmless if already verified):", rpcErr);
+      }
+    }
+
+    await loadData();
+    broadcastAdminAction("users-updated");
   };
 
   const handleChangePassword = (e) => {
@@ -603,6 +629,31 @@ export default function AdminDashboard() {
                     <span style={{ fontSize: 16, fontWeight: 800, color: "#10b981" }}>
                       ${(parseFloat(u.portfolioBalance) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
+                  </div>
+
+                  {/* Approval Status Row */}
+                  <div style={{ padding: "10px 16px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc" }}>
+                    <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>Access Status</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className={`badge ${u.isApproved ? "badge-completed" : "badge-pending"}`} style={{ fontSize: "11px", padding: "2px 8px", borderRadius: 4, background: u.isApproved ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: u.isApproved ? "#10b981" : "#ef4444", fontWeight: 600 }}>
+                        {u.isApproved ? "Approved" : "Blocked"}
+                      </span>
+                      <button 
+                        className="admin-btn" 
+                        style={{ 
+                          padding: "3px 8px", 
+                          fontSize: "11px", 
+                          background: u.isApproved ? "#ef4444" : "#10b981", 
+                          color: "#fff",
+                          border: "none",
+                          cursor: "pointer",
+                          borderRadius: 4
+                        }}
+                        onClick={() => handleToggleApproval(u.id, u.isApproved)}
+                      >
+                        {u.isApproved ? "Block" : "Approve"}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Card Body - Inline Actions */}
