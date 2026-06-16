@@ -23,6 +23,12 @@ export default function Dashboard() {
   const [userName, setUserName] = useState("Alex Johnson");
   const [selectedPlan, setSelectedPlan] = useState("crypto");
   const [baseAmount, setBaseAmount] = useState(0); // default to $0
+  const baseAmountRef = useRef(0);
+
+  useEffect(() => {
+    baseAmountRef.current = baseAmount;
+  }, [baseAmount]);
+
   const [activities, setActivities] = useState([]);
 
   // Wallet and Payout tracking states
@@ -86,6 +92,23 @@ export default function Dashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationsList, setNotificationsList] = useState([]);
   const initialSyncCompleted = useRef(false);
+  const notificationRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    }
+    if (showNotifications) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [showNotifications]);
 
   // Support FAQ & Chatbot States
   const [activeFaqIndex, setActiveFaqIndex] = useState(null);
@@ -329,7 +352,7 @@ export default function Dashboard() {
 
       // Wallet Balance Adjustment Detector
       if (initialSyncCompleted.current) {
-        const diff = newBalance - baseAmount;
+        const diff = newBalance - baseAmountRef.current;
         if (Math.abs(diff) > 0.01) {
           const changeType = diff > 0 ? "credited" : "debited";
           
@@ -358,6 +381,7 @@ export default function Dashboard() {
       setFormUserEmail(user.email);
       setSelectedPlan(profile.selected_plan || "crypto");
       setBaseAmount(newBalance);
+      baseAmountRef.current = newBalance;
       setTotalDeposits(parseFloat(profile.total_deposits || 0));
       setTotalWithdrawals(parseFloat(profile.total_withdrawals || 0));
       setPendingWithdrawal(parseFloat(profile.pending_withdrawal || 0));
@@ -1487,7 +1511,7 @@ export default function Dashboard() {
           </div>
           
           <div className="header-user-actions">
-            <div style={{ position: "relative" }}>
+            <div style={{ position: "relative" }} ref={notificationRef}>
               <div className="header-icon-btn notification-badge" style={{ cursor: "pointer" }} onClick={() => setShowNotifications(!showNotifications)}>
                 <LucideIcon name="bell" />
                 {notificationsList.filter(n => n.unread).length > 0 && (
