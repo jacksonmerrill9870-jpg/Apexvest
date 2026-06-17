@@ -73,35 +73,52 @@ export default function ClientShell({ children }) {
     e.preventDefault();
     setLoginError("");
 
-    const isDemoLogin =
-      loginEmail.toLowerCase() === "demo@apexvest.com" && loginPassword === "password123";
-
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
     });
 
     if (error) {
-      if (isDemoLogin) {
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("userName", "Demo User");
-        localStorage.setItem("userEmail", "demo@apexvest.com");
-        localStorage.setItem("currentUserId", "demo-id");
-        setIsLoggedIn(true);
-        closeModal();
-        window.dispatchEvent(new CustomEvent("auth-state-changed"));
-        window.location.href = "/dashboard";
-        return;
-      }
       setLoginError(error.message);
       return;
     }
 
-    const { data: profile } = await supabase
+    let { data: profile } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", data.user.id)
       .single();
+
+    // Self-healing profile creation: if the profile record is missing from the database
+    // (which occurs if signup with email verification required failed to insert it due to RLS),
+    // we upsert it now that the user is authenticated.
+    if (!profile) {
+      const username = data.user.user_metadata?.user_name || data.user.user_metadata?.username || data.user.user_metadata?.name || data.user.email.split("@")[0];
+      const plan = data.user.user_metadata?.selected_plan || data.user.user_metadata?.plan || "crypto";
+      
+      const { data: newProfile, error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: data.user.id,
+          user_name: username,
+          user_email: data.user.email,
+          selected_plan: plan,
+          portfolio_balance: 0,
+          total_deposits: 0,
+          total_withdrawals: 0,
+          pending_withdrawal: 0,
+          total_invested: 0,
+          is_approved: true
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error("Profile creation error on login:", profileError);
+      } else {
+        profile = newProfile;
+      }
+    }
 
     if (profile && profile.is_approved === false) {
       await supabase.auth.signOut();
@@ -172,6 +189,13 @@ export default function ClientShell({ children }) {
 
     if (!data.user) {
       alert("Registration failed. Please check your credentials.");
+      return;
+    }
+
+    // Check if email verification is required (i.e. double opt-in enabled and session is null)
+    if (!data.session) {
+      alert("Registration successful! A verification email has been sent to your email address. Please check your inbox and verify your email before logging in.");
+      closeModal();
       return;
     }
 

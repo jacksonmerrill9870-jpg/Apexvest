@@ -645,16 +645,82 @@ export default function Dashboard() {
     }
   }, [isLoggedIn, activities, activeView, depositMethod, withdrawMethod, settingsTab, transactionsList]);
 
-  const handleDemoLogin = (e) => {
+  const handleLogin = async (e) => {
     if (e) e.preventDefault();
-    if ((email === "demo@apexvest.com" && password === "password123") || (!email && !password)) {
-      localStorage.setItem("isLoggedIn", "true");
-      setIsLoggedIn(true);
-      setErrorMsg("");
-      window.dispatchEvent(new CustomEvent("auth-state-changed"));
-    } else {
-      setErrorMsg("Invalid credentials. Use demo@apexvest.com and password123");
+    setErrorMsg("");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) {
+      setErrorMsg(error.message);
+      return;
     }
+
+    let { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
+
+    // Self-healing profile creation: if the profile record is missing from the database
+    // (which occurs if signup with email verification required failed to insert it due to RLS),
+    // we upsert it now that the user is authenticated.
+    if (!profile) {
+      const username = data.user.user_metadata?.user_name || data.user.user_metadata?.username || data.user.user_metadata?.name || data.user.email.split("@")[0];
+      const plan = data.user.user_metadata?.selected_plan || data.user.user_metadata?.plan || "crypto";
+      
+      const { data: newProfile, error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: data.user.id,
+          user_name: username,
+          user_email: data.user.email,
+          selected_plan: plan,
+          portfolio_balance: 0,
+          total_deposits: 0,
+          total_withdrawals: 0,
+          pending_withdrawal: 0,
+          total_invested: 0,
+          is_approved: true
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error("Profile creation error on login:", profileError);
+      } else {
+        profile = newProfile;
+      }
+    }
+
+    if (profile && profile.is_approved === false) {
+      await supabase.auth.signOut();
+      setErrorMsg("Your account has been blocked or is awaiting admin approval.");
+      return;
+    }
+
+    localStorage.setItem("currentUserId", data.user.id);
+    localStorage.setItem("userName", profile?.user_name || data.user.email.split("@")[0]);
+    localStorage.setItem("userEmail", data.user.email);
+    localStorage.setItem("selectedPlan", profile?.selected_plan || "crypto");
+    localStorage.setItem("portfolioBalance", String(profile?.portfolio_balance || 0));
+    localStorage.setItem("totalDeposits", String(profile?.total_deposits || 0));
+    localStorage.setItem("totalWithdrawals", String(profile?.total_withdrawals || 0));
+    localStorage.setItem("pendingWithdrawal", String(profile?.pending_withdrawal || 0));
+    localStorage.setItem("totalInvested", String(profile?.total_invested || 0));
+    localStorage.setItem("adminBankWireInfo", profile?.admin_bank_wire_info || "");
+    localStorage.setItem("wireRecipientName", profile?.wire_recipient_name || "");
+    localStorage.setItem("wireRecipientAddress", profile?.wire_recipient_address || "");
+    localStorage.setItem("wireBankName", profile?.wire_bank_name || "");
+    localStorage.setItem("wireRoutingNumber", profile?.wire_routing_number || "");
+    localStorage.setItem("wireAccountNumber", profile?.wire_account_number || "");
+    
+    localStorage.setItem("isLoggedIn", "true");
+    setIsLoggedIn(true);
+    window.dispatchEvent(new CustomEvent("auth-state-changed"));
   };
 
   const handleLogout = () => {
@@ -1398,7 +1464,7 @@ export default function Dashboard() {
           <h2>Access Investor Dashboard</h2>
           <p className="gateway-desc">Sign in to review portfolio allocations, wallet balances, and investment feeds.</p>
           
-          <form onSubmit={handleDemoLogin} className="modal-form active">
+          <form onSubmit={handleLogin} className="modal-form active">
             {errorMsg && (
               <div className="error-banner" style={{
                 color: "var(--color-red)",
