@@ -5,7 +5,7 @@ export async function POST(request) {
     const { email, username } = await request.json();
 
     const brevoApiKey = process.env.BREVO_API_KEY;
-    const senderEmail = process.env.BREVO_SENDER_EMAIL || "jacksonmerrill9870@gmail.com";
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || "apexvest.inc@gmail.com";
 
     if (!brevoApiKey) {
       console.error("Missing BREVO_API_KEY environment variable");
