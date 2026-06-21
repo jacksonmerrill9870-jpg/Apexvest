@@ -354,6 +354,27 @@ export default function Dashboard() {
         localStorage.setItem("telegramChatId", settings.telegram_chat_id);
       }
 
+      // Fetch dynamic investment plans from database
+      const { data: dbPlans, error: plansErr } = await supabase
+        .from("investment_plans")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (!plansErr && dbPlans && dbPlans.length > 0) {
+        const mappedPlans = dbPlans.map(p => ({
+          id: p.id,
+          name: p.name,
+          roi: p.roi,
+          minDeposit: parseFloat(p.min_deposit || 0),
+          maxDeposit: p.max_deposit ? parseFloat(p.max_deposit) : null,
+          depositType: p.deposit_type,
+          fixedAmount: p.fixed_amount ? parseFloat(p.fixed_amount) : null,
+          duration: p.duration
+        }));
+        setDynamicPlans(mappedPlans);
+        localStorage.setItem("investmentPlans", JSON.stringify(mappedPlans));
+      }
+
       const newBalance = parseFloat(profile.portfolio_balance || 0);
 
       // Wallet Balance Adjustment Detector
@@ -568,7 +589,9 @@ export default function Dashboard() {
 
     const balance = baseAmount || parseFloat(localStorage.getItem("portfolioBalance") || "0");
     const activeCost = parseFloat(localStorage.getItem("activePlanInvestedAmount") || "0");
-    const activeROI = activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.40 : 0.25;
+    
+    const activePlanObj = dynamicPlans.find(p => p.id === activeInvestmentPlan);
+    const activeROI = activePlanObj ? (parseFloat(activePlanObj.roi) / 100) : (activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.40 : 0.25);
 
     const referenceAmount = activeCost > 0 ? activeCost : balance;
 
@@ -608,7 +631,7 @@ export default function Dashboard() {
 
     setNotificationsList(list);
     localStorage.setItem(`notifications_${cid}`, JSON.stringify(list));
-  }, [isLoggedIn, baseAmount, activeInvestmentPlan]);
+  }, [isLoggedIn, baseAmount, activeInvestmentPlan, dynamicPlans]);
 
   // Live profit tick notifications simulator (ticks a new daily profit notification every 30s when investment is active)
   useEffect(() => {
@@ -616,14 +639,16 @@ export default function Dashboard() {
 
     const interval = setInterval(() => {
       const cost = parseFloat(localStorage.getItem("activePlanInvestedAmount") || "500");
-      const activeROI = activeInvestmentPlan === "diamond" ? 0.20 : 0.40;
+      const activePlanObj = dynamicPlans.find(p => p.id === activeInvestmentPlan);
+      const activeROI = activePlanObj ? (parseFloat(activePlanObj.roi) / 100) : (activeInvestmentPlan === "diamond" ? 0.20 : 0.40);
       const mockDailyProfit = cost * (activeROI / 30) * (1 + Math.random() * 0.1);
+      const planName = activePlanObj?.name || (activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan");
       
-      addNotification("profit", `💰 Live Yield Accrual: Accrued daily yield of $${mockDailyProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been generated from your active ${activeInvestmentPlan === "diamond" ? "Diamond" : "Premium"} Plan.`);
+      addNotification("profit", `💰 Live Yield Accrual: Accrued daily yield of $${mockDailyProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been generated from your active ${planName}.`);
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [activeInvestmentPlan, investmentTimeRemaining]);
+  }, [activeInvestmentPlan, investmentTimeRemaining, dynamicPlans]);
 
   const handleReceiptChange = (e) => {
     const file = e.target.files[0];
@@ -1384,12 +1409,13 @@ export default function Dashboard() {
     }
   };
 
-  const activeROI = activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.25 : 0.00;
+  const activePlanObj = dynamicPlans.find(p => p.id === activeInvestmentPlan);
+  const activeROI = activePlanObj ? (parseFloat(activePlanObj.roi) / 100) : (activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.25 : 0.00);
   const profit = totalInvested * activeROI;
   const portfolioValue = Math.max(0, totalDeposits - totalWithdrawals - pendingWithdrawal + profit);
-  const todaysEarningsPercent = (activeROI * 100).toFixed(0);
+  const todaysEarningsPercent = activePlanObj ? activePlanObj.roi.replace('%', '') : (activeROI * 100).toFixed(0);
   const currentInvestmentPlanDisplay = activeInvestmentPlan 
-    ? (activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan") 
+    ? (activePlanObj?.name || (activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan")) 
     : (PLAN_LABELS[selectedPlan] || "Premium Investor");
 
   // Dynamic chart multipliers and scaling
@@ -1704,7 +1730,7 @@ export default function Dashboard() {
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#3b82f6", display: "inline-block" }}></span>
                   <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#1e3a8a" }}>
-                    Active Investment: <strong style={{ color: "#1d4ed8" }}>{activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan"}</strong>
+                    Active Investment: <strong style={{ color: "#1d4ed8" }}>{activePlanObj?.name || (activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan")}</strong>
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
