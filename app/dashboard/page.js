@@ -234,6 +234,8 @@ export default function Dashboard() {
   const [selectedPlanDurations, setSelectedPlanDurations] = useState({}); // { [planId]: duration }
   const [selectedPlanAmounts, setSelectedPlanAmounts] = useState({}); // { [planId]: amount }
   const [activeInvestmentPlan, setActiveInvestmentPlan] = useState(null); // stores active plan ID
+  const [activePlanInvestedAmount, setActivePlanInvestedAmount] = useState(0);
+  const [topUpAmountInput, setTopUpAmountInput] = useState("");
   const [investmentTimeRemaining, setInvestmentTimeRemaining] = useState(0);
   const [dynamicPlans, setDynamicPlans] = useState([
     { id: "diamond", name: "Diamond Plan", roi: "20%", minDeposit: 500, depositType: "fixed", fixedAmount: 500, duration: "1 month" },
@@ -466,6 +468,34 @@ export default function Dashboard() {
 
         setTransactionsList(mappedTxns);
         localStorage.setItem("userTransactionsList", JSON.stringify(mappedTxns));
+
+        // Check for active database investment
+        const activeDbInvest = txns.find(t => t.transaction_type === "investment" && t.status === "Active");
+        if (activeDbInvest) {
+          const planId = activeDbInvest.reference_code;
+          const investedAmount = parseFloat(activeDbInvest.amount || 0);
+          const duration = activeDbInvest.date_time || "1 month";
+          const endTime = parseFloat(activeDbInvest.cleared_destination_details || "0");
+          const remainingSeconds = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+          
+          setActiveInvestmentPlan(planId);
+          setActivePlanInvestedAmount(investedAmount);
+          setInvestmentTimeRemaining(remainingSeconds);
+          
+          localStorage.setItem("activeInvestmentPlan", planId);
+          localStorage.setItem("activePlanInvestedAmount", investedAmount.toString());
+          localStorage.setItem("activePlanDuration", duration);
+          localStorage.setItem("investmentEndTime", endTime.toString());
+        } else {
+          setActiveInvestmentPlan(null);
+          setActivePlanInvestedAmount(0);
+          setInvestmentTimeRemaining(0);
+          
+          localStorage.removeItem("activeInvestmentPlan");
+          localStorage.removeItem("activePlanInvestedAmount");
+          localStorage.removeItem("activePlanDuration");
+          localStorage.removeItem("investmentEndTime");
+        }
       }
 
       localStorage.setItem("currentUserId", user.id);
@@ -516,8 +546,10 @@ export default function Dashboard() {
     const storedActivePlan = localStorage.getItem("activeInvestmentPlan");
     if (storedActivePlan) {
       setActiveInvestmentPlan(storedActivePlan);
+      setActivePlanInvestedAmount(parseFloat(localStorage.getItem("activePlanInvestedAmount") || "0"));
     } else {
       setActiveInvestmentPlan(null);
+      setActivePlanInvestedAmount(0);
     }
   }, [isLoggedIn]);
 
@@ -1050,7 +1082,7 @@ export default function Dashboard() {
   };
 
   // Plan Investment Handlers
-  const handleInvest = (e, plan) => {
+  const handleInvest = async (e, plan) => {
     e.preventDefault();
     const isFixed = plan.depositType !== "range";
     let cost = 0;
@@ -1078,6 +1110,7 @@ export default function Dashboard() {
     setBaseAmount(newBalance);
     setTotalInvested(newTotalInvested);
     setActiveInvestmentPlan(plan.id);
+    setActivePlanInvestedAmount(cost);
     localStorage.setItem("portfolioBalance", newBalance.toString());
     localStorage.setItem("totalInvested", newTotalInvested.toString());
     localStorage.setItem("activeInvestmentPlan", plan.id);
@@ -1088,6 +1121,38 @@ export default function Dashboard() {
     const endTime = Date.now() + seconds * 1000;
     localStorage.setItem("investmentEndTime", endTime.toString());
     setInvestmentTimeRemaining(seconds);
+
+    // Save to Supabase
+    const cid = localStorage.getItem("currentUserId");
+    if (cid && cid !== "demo-id") {
+      const { error: txnErr } = await supabase
+        .from("transactions")
+        .insert([{
+          user_id: cid,
+          reference_code: plan.id,
+          date_time: duration,
+          transaction_type: "investment",
+          cleared_destination_details: endTime.toString(),
+          amount: cost,
+          status: "Active"
+        }]);
+
+      if (txnErr) {
+        console.error("Error creating active investment in Supabase:", txnErr);
+      }
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          portfolio_balance: newBalance,
+          total_invested: newTotalInvested
+        })
+        .eq("id", cid);
+
+      if (profileError) {
+        console.error("Error updating profile balance on investment:", profileError);
+      }
+    }
 
     // Append activities log
     const newActivity = {
@@ -1124,7 +1189,7 @@ export default function Dashboard() {
     setActiveView("dashboard");
   };
 
-  const handlePayout = (planId) => {
+  const handlePayout = async (planId) => {
     const activePlanId = planId || localStorage.getItem("activeInvestmentPlan");
     if (!activePlanId) return;
 
@@ -1157,6 +1222,7 @@ export default function Dashboard() {
     });
 
     setActiveInvestmentPlan(null);
+    setActivePlanInvestedAmount(0);
     setInvestmentTimeRemaining(0);
 
     localStorage.removeItem("activeInvestmentPlan");
@@ -1166,6 +1232,63 @@ export default function Dashboard() {
     localStorage.removeItem("diamondDuration");
     localStorage.removeItem("premiumDuration");
     localStorage.removeItem("investmentEndTime");
+
+    // Save to Supabase
+    const cid = localStorage.getItem("currentUserId");
+    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (cid && cid !== "demo-id") {
+      const { error: txnErr } = await supabase
+        .from("transactions")
+        .update({ status: "Completed" })
+        .eq("user_id", cid)
+        .eq("transaction_type", "investment")
+        .eq("status", "Active");
+
+      if (txnErr) {
+        console.error("Error updating active investment transaction to Completed:", txnErr);
+      }
+
+      const { error: payoutTxnErr } = await supabase
+        .from("transactions")
+        .insert([{
+          user_id: cid,
+          reference_code: txnId,
+          date_time: "Today",
+          transaction_type: "deposit",
+          cleared_destination_details: `Principal + ${(rate * 100)}% Profit (${dur} lock)`,
+          amount: totalPayout,
+          status: "Completed"
+        }]);
+
+      if (payoutTxnErr) {
+        console.error("Error creating payout transaction ledger:", payoutTxnErr);
+      }
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("portfolio_balance, total_invested")
+        .eq("id", cid)
+        .single();
+      
+      if (currentProfile) {
+        const currentBal = parseFloat(currentProfile.portfolio_balance || 0);
+        const currentInvested = parseFloat(currentProfile.total_invested || 0);
+        const dbNewBalance = currentBal + totalPayout;
+        const dbNewTotalInvested = Math.max(0, currentInvested - cost);
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            portfolio_balance: dbNewBalance,
+            total_invested: dbNewTotalInvested
+          })
+          .eq("id", cid);
+
+        if (profileError) {
+          console.error("Error updating profile balance on payout:", profileError);
+        }
+      }
+    }
 
     // Append yield payout activity
     setActivities(prev => {
@@ -1183,7 +1306,6 @@ export default function Dashboard() {
     });
 
     // Append yield payout to ledger
-    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
     const newTxn = {
       id: txnId,
       type: "deposit",
@@ -1241,7 +1363,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [activeInvestmentPlan, investmentTimeRemaining]);
 
-  const handleCancelInvestment = (e) => {
+  const handleCancelInvestment = async (e) => {
     if (e) e.preventDefault();
     if (!activeInvestmentPlan) return;
 
@@ -1262,6 +1384,7 @@ export default function Dashboard() {
     setBaseAmount(newBalance);
     setTotalInvested(newTotalInvested);
     setActiveInvestmentPlan(null);
+    setActivePlanInvestedAmount(0);
     setInvestmentTimeRemaining(0);
 
     localStorage.setItem("portfolioBalance", newBalance.toString());
@@ -1274,6 +1397,63 @@ export default function Dashboard() {
     localStorage.removeItem("diamondDuration");
     localStorage.removeItem("premiumDuration");
     localStorage.removeItem("investmentEndTime");
+
+    // Save to Supabase
+    const cid = localStorage.getItem("currentUserId");
+    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (cid && cid !== "demo-id") {
+      const { error: txnErr } = await supabase
+        .from("transactions")
+        .update({ status: "Cancelled" })
+        .eq("user_id", cid)
+        .eq("transaction_type", "investment")
+        .eq("status", "Active");
+
+      if (txnErr) {
+        console.error("Error updating active investment transaction to Cancelled:", txnErr);
+      }
+
+      const { error: refundTxnErr } = await supabase
+        .from("transactions")
+        .insert([{
+          user_id: cid,
+          reference_code: txnId,
+          date_time: "Today",
+          transaction_type: "withdrawal",
+          cleared_destination_details: "Principal refunded to cash balance",
+          amount: refundAmount,
+          status: "Completed"
+        }]);
+
+      if (refundTxnErr) {
+        console.error("Error creating cancellation refund transaction:", refundTxnErr);
+      }
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("portfolio_balance, total_invested")
+        .eq("id", cid)
+        .single();
+      
+      if (currentProfile) {
+        const currentBal = parseFloat(currentProfile.portfolio_balance || 0);
+        const currentInvested = parseFloat(currentProfile.total_invested || 0);
+        const dbNewBalance = currentBal + refundAmount;
+        const dbNewTotalInvested = Math.max(0, currentInvested - refundAmount);
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            portfolio_balance: dbNewBalance,
+            total_invested: dbNewTotalInvested
+          })
+          .eq("id", cid);
+
+        if (profileError) {
+          console.error("Error updating profile balance on cancellation:", profileError);
+        }
+      }
+    }
 
     // Append cancellation to activities feed
     const newActivity = {
@@ -1289,7 +1469,6 @@ export default function Dashboard() {
     localStorage.setItem("userActivities", JSON.stringify(updatedActivities));
 
     // Append cancellation to transactions ledger
-    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
     const newTxn = {
       id: txnId,
       type: "withdrawal",
@@ -1309,6 +1488,139 @@ export default function Dashboard() {
 
     alert(`Successfully cancelled your ${plan.name} investment. $${refundAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been refunded to your wallet.`);
     setActiveView("dashboard");
+  };
+
+  const handleTopUp = async (e, planId) => {
+    if (e) e.preventDefault();
+    const amount = parseFloat(topUpAmountInput);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid positive top-up amount.");
+      return;
+    }
+
+    if (baseAmount < amount) {
+      alert("Insufficient cash balance in your Available Cash to perform this top-up.");
+      return;
+    }
+
+    const plan = dynamicPlans.find(p => p.id === planId) || {
+      id: planId,
+      name: planId === "diamond" ? "Diamond Plan" : "Premium Plan"
+    };
+
+    const newBalance = baseAmount - amount;
+    const newTotalInvested = totalInvested + amount;
+    const newInvestedAmount = activePlanInvestedAmount + amount;
+
+    setBaseAmount(newBalance);
+    setTotalInvested(newTotalInvested);
+    setActivePlanInvestedAmount(newInvestedAmount);
+    setTopUpAmountInput("");
+
+    localStorage.setItem("portfolioBalance", newBalance.toString());
+    localStorage.setItem("totalInvested", newTotalInvested.toString());
+    localStorage.setItem("activePlanInvestedAmount", newInvestedAmount.toString());
+
+    // Save to Supabase
+    const cid = localStorage.getItem("currentUserId");
+    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (cid && cid !== "demo-id") {
+      const { data: activeTxns } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", cid)
+        .eq("transaction_type", "investment")
+        .eq("status", "Active")
+        .limit(1);
+
+      if (activeTxns && activeTxns.length > 0) {
+        const activeTxn = activeTxns[0];
+        const newTxnAmount = parseFloat(activeTxn.amount || 0) + amount;
+        
+        const { error: txnErr } = await supabase
+          .from("transactions")
+          .update({ amount: newTxnAmount })
+          .eq("id", activeTxn.id);
+
+        if (txnErr) {
+          console.error("Error updating investment amount in Supabase:", txnErr);
+        }
+      }
+
+      const { error: topUpTxnErr } = await supabase
+        .from("transactions")
+        .insert([{
+          user_id: cid,
+          reference_code: txnId,
+          date_time: "Today",
+          transaction_type: "withdrawal",
+          cleared_destination_details: `Added capital to active ${plan.name}`,
+          amount: amount,
+          status: "Completed"
+        }]);
+
+      if (topUpTxnErr) {
+        console.error("Error creating top up transaction ledger:", topUpTxnErr);
+      }
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("portfolio_balance, total_invested")
+        .eq("id", cid)
+        .single();
+      
+      if (currentProfile) {
+        const currentBal = parseFloat(currentProfile.portfolio_balance || 0);
+        const currentInvested = parseFloat(currentProfile.total_invested || 0);
+        const dbNewBalance = Math.max(0, currentBal - amount);
+        const dbNewTotalInvested = currentInvested + amount;
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            portfolio_balance: dbNewBalance,
+            total_invested: dbNewTotalInvested
+          })
+          .eq("id", cid);
+
+        if (profileError) {
+          console.error("Error updating profile balance on top-up:", profileError);
+        }
+      }
+    }
+
+    const newActivity = {
+      id: Date.now(),
+      type: "investment",
+      title: `Topped Up ${plan.name} Investment`,
+      time: "Today",
+      amount: amount,
+      isPositive: false
+    };
+    const updatedActivities = [newActivity, ...activities].slice(0, 3);
+    setActivities(updatedActivities);
+    localStorage.setItem("userActivities", JSON.stringify(updatedActivities));
+
+    const newTxn = {
+      id: txnId,
+      type: "withdrawal",
+      title: `${plan.name} Top Up`,
+      detail: `Added $${amount.toLocaleString()} to investment`,
+      date: "Today",
+      amount: amount,
+      status: "Completed"
+    };
+    setTransactionsList(prev => {
+      const updated = [newTxn, ...prev];
+      localStorage.setItem("userTransactionsList", JSON.stringify(updated));
+      return updated;
+    });
+
+    addNotification("payout", `Top Up Credited: Added $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} to ${plan.name} investment. New balance: $${newInvestedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`);
+
+    alert(`Successfully topped up your ${plan.name} investment by $${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}!\nNew total investment amount: $${newInvestedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`);
+    
+    syncDataFromSupabase();
   };
 
   // Profile Settings submit handler
@@ -2109,12 +2421,56 @@ export default function Dashboard() {
                           gap: "4px"
                         }}>
                           <div style={{ fontWeight: "700", marginBottom: "2px" }}>✓ Currently Invested</div>
+                          <div>Invested Amount: <span style={{ fontWeight: "700" }}>${(activePlanInvestedAmount || parseFloat(localStorage.getItem("activePlanInvestedAmount") || "0")).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
                           <div>Duration: {localStorage.getItem("activePlanDuration") || planDuration}</div>
                           <div>Expected Return: ROI {plan.roi}</div>
                           <div style={{ marginTop: "6px", fontWeight: "700", color: "#2563eb", fontFamily: "monospace" }}>
                             Time Remaining: {formatCountdown(investmentTimeRemaining)}
                           </div>
                         </div>
+
+                        {/* Top Up Input and Button */}
+                        <form onSubmit={(e) => handleTopUp(e, plan.id)} style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                          <div className="input-wrapper" style={{ position: "relative", flex: 1 }}>
+                            <LucideIcon name="dollar-sign" className="input-icon" style={{ left: "10px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", color: "#64748b" }} />
+                            <input 
+                              type="number"
+                              min="1"
+                              step="any"
+                              value={topUpAmountInput}
+                              onChange={(e) => setTopUpAmountInput(e.target.value)}
+                              placeholder="Top up amount..."
+                              required
+                              style={{
+                                width: "100%",
+                                padding: "8px 8px 8px 28px",
+                                borderRadius: "8px",
+                                border: "1px solid #cbd5e1",
+                                fontSize: "12px",
+                                fontWeight: "500",
+                                backgroundColor: "#fff",
+                                color: "#000"
+                              }}
+                            />
+                          </div>
+                          <button 
+                            type="submit" 
+                            className="btn btn-filled"
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: "8px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              backgroundColor: "#2563eb",
+                              color: "#fff",
+                              border: "none",
+                              cursor: "pointer"
+                            }}
+                          >
+                            Top Up
+                          </button>
+                        </form>
+
                         <button 
                           onClick={handleCancelInvestment} 
                           className="btn btn-outline w-full" 
