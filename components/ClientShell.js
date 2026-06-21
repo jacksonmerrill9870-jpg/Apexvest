@@ -269,6 +269,18 @@ export default function ClientShell({ children }) {
       return;
     }
 
+    // Send custom welcome/verification email
+    fetch("/api/send-verification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: useremail,
+        username: username
+      })
+    }).catch(err => console.error("Error sending custom welcome email:", err));
+
     // Check if email verification is required (i.e. double opt-in enabled and session is null)
     if (!data.session) {
       alert("Registration successful! A verification email has been sent to your email address. Please check your inbox and verify your email before logging in.");
@@ -323,6 +335,7 @@ export default function ClientShell({ children }) {
     setIsLoggedIn(true);
     closeModal();
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
+    alert(`Account created successfully! Welcome to Apexvest, ${username}. A welcome email has been sent to ${useremail}.`);
     window.location.href = "/dashboard";
   };
 
