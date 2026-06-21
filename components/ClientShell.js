@@ -44,6 +44,82 @@ export default function ClientShell({ children }) {
     };
   }, []);
 
+  // Sync authentication from Supabase Auth State Change (e.g. after email verification redirect)
+  useEffect(() => {
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!active) return;
+      if (event === "SIGNED_IN" && session) {
+        const currentUserId = localStorage.getItem("currentUserId");
+        if (currentUserId !== session.user.id) {
+          let { data: profile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+
+          if (!profile) {
+            const username = session.user.user_metadata?.user_name || session.user.user_metadata?.username || session.user.user_metadata?.name || session.user.email.split("@")[0];
+            const plan = session.user.user_metadata?.selected_plan || session.user.user_metadata?.plan || "crypto";
+            
+            const { data: newProfile, error: profileError } = await supabase
+              .from("profiles")
+              .upsert({
+                id: session.user.id,
+                user_name: username,
+                user_email: session.user.email,
+                selected_plan: plan,
+                portfolio_balance: 0,
+                total_deposits: 0,
+                total_withdrawals: 0,
+                pending_withdrawal: 0,
+                total_invested: 0,
+                is_approved: true
+              })
+              .select()
+              .single();
+
+            if (profileError) {
+              console.error("Profile creation error on auth redirect:", profileError);
+            } else {
+              profile = newProfile;
+            }
+          }
+
+          if (profile && profile.is_approved === false) {
+            await supabase.auth.signOut();
+            return;
+          }
+
+          localStorage.setItem("currentUserId", session.user.id);
+          localStorage.setItem("userName", profile?.user_name || session.user.email.split("@")[0]);
+          localStorage.setItem("userEmail", session.user.email);
+          localStorage.setItem("selectedPlan", profile?.selected_plan || "crypto");
+          localStorage.setItem("portfolioBalance", String(profile?.portfolio_balance || 0));
+          localStorage.setItem("totalDeposits", String(profile?.total_deposits || 0));
+          localStorage.setItem("totalWithdrawals", String(profile?.total_withdrawals || 0));
+          localStorage.setItem("pendingWithdrawal", String(profile?.pending_withdrawal || 0));
+          localStorage.setItem("totalInvested", String(profile?.total_invested || 0));
+          localStorage.setItem("adminBankWireInfo", profile?.admin_bank_wire_info || "");
+          localStorage.setItem("wireRecipientName", profile?.wire_recipient_name || "");
+          localStorage.setItem("wireRecipientAddress", profile?.wire_recipient_address || "");
+          localStorage.setItem("wireBankName", profile?.wire_bank_name || "");
+          localStorage.setItem("wireRoutingNumber", profile?.wire_routing_number || "");
+          localStorage.setItem("wireAccountNumber", profile?.wire_account_number || "");
+          localStorage.setItem("isLoggedIn", "true");
+          setIsLoggedIn(true);
+          window.dispatchEvent(new CustomEvent("auth-state-changed"));
+          window.location.href = "/dashboard";
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Handlers
   const openModal = (tab) => {
     setModalTab(tab);
@@ -170,6 +246,7 @@ export default function ClientShell({ children }) {
       email: useremail,
       password: password,
       options: {
+        emailRedirectTo: `${window.location.origin}/`,
         data: {
           user_name: username,
           username: username,
