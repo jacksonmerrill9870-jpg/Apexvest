@@ -1747,23 +1747,33 @@ export default function Dashboard() {
   const getDynamicChartData = () => {
     const numPoints = getTimelineLabels().length;
     const sData = [];
-    
-    // Chart starts at totalDeposits (or 0 if none) and ends exactly at baseAmount (available cash)
-    const startVal = totalDeposits > 0 ? totalDeposits : 0;
-    const endVal = baseAmount;
 
     for (let i = 0; i < numPoints; i++) {
-      const fraction = numPoints > 1 ? i / (numPoints - 1) : 1.0;
-      
-      // Interpolate between startVal and endVal
-      const baseVal = startVal + (endVal - startVal) * fraction;
-      
-      // Add a deterministic wave/fluctuation pattern so the line is wavy,
-      // but ensure fluctuation is 0 at start (fraction = 0) and end (fraction = 1).
-      const fluctuationScale = Math.max(startVal, endVal) * 0.03; // max 3% fluctuation
-      const fluctuation = Math.sin(fraction * Math.PI * 3.5) * Math.sin(fraction * Math.PI) * fluctuationScale;
-      
-      sData.push(Math.max(0, baseVal + fluctuation));
+      if (i === 0) {
+        sData.push(0);
+      } else {
+        const fraction = numPoints > 1 ? i / (numPoints - 1) : 1.0;
+        
+        // Deposit contribution ramps up to totalDeposits
+        const depositContribution = totalDeposits * Math.min(1.0, fraction * 2.0);
+        let val = 0;
+
+        if (baseAmount < totalDeposits) {
+          // Decline from totalDeposits down to baseAmount
+          const decline = (totalDeposits - baseAmount) * Math.max(0.0, (fraction - 0.4) / 0.6);
+          val = depositContribution - decline;
+        } else {
+          // Growth from totalDeposits up to baseAmount
+          const growth = (baseAmount - totalDeposits) * Math.pow(fraction, 2);
+          val = depositContribution + growth;
+        }
+
+        // Add deterministic premium fluctuation wave
+        const fluctuationScale = Math.max(totalDeposits, baseAmount) * 0.02;
+        const fluctuation = Math.sin(fraction * Math.PI * 3.5) * Math.sin(fraction * Math.PI) * fluctuationScale;
+
+        sData.push(Math.max(0, val + fluctuation));
+      }
     }
 
     const yMin = 0; // Always start scaling from $0
