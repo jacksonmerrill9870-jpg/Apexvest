@@ -1209,45 +1209,31 @@ export default function Dashboard() {
     const profitEarned = cost * rate * mult;
     const totalPayout = cost + profitEarned;
 
-    setBaseAmount(prev => {
-      const newBal = prev + totalPayout;
-      localStorage.setItem("portfolioBalance", newBal.toString());
-      return newBal;
-    });
-
-    setTotalInvested(prev => {
-      const newInvested = Math.max(0, prev - cost);
-      localStorage.setItem("totalInvested", newInvested.toString());
-      return newInvested;
-    });
-
-    setActiveInvestmentPlan(null);
-    setActivePlanInvestedAmount(0);
-    setInvestmentTimeRemaining(0);
-
-    localStorage.removeItem("activeInvestmentPlan");
-    localStorage.removeItem("activePlanInvestedAmount");
-    localStorage.removeItem("activePlanDuration");
-    localStorage.removeItem("premiumInvestedAmount");
-    localStorage.removeItem("diamondDuration");
-    localStorage.removeItem("premiumDuration");
-    localStorage.removeItem("investmentEndTime");
-
-    // Save to Supabase
     const cid = localStorage.getItem("currentUserId");
     const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+
     if (cid && cid !== "demo-id") {
-      const { error: txnErr } = await supabase
+      // 1. Update active investment status in Supabase. Only proceed if we actually update an Active transaction.
+      const { data: updatedTxns, error: txnErr } = await supabase
         .from("transactions")
         .update({ status: "Completed" })
         .eq("user_id", cid)
         .eq("transaction_type", "investment")
-        .eq("status", "Active");
+        .eq("status", "Active")
+        .select();
 
       if (txnErr) {
         console.error("Error updating active investment transaction to Completed:", txnErr);
+        return;
       }
 
+      // If no rows were updated, it means another thread/tab has already processed this maturation.
+      if (!updatedTxns || updatedTxns.length === 0) {
+        console.log("Investment payout already processed (0 rows updated in Supabase).");
+        return;
+      }
+
+      // 2. Insert payout transaction ledger
       const { error: payoutTxnErr } = await supabase
         .from("transactions")
         .insert([{
@@ -1264,6 +1250,7 @@ export default function Dashboard() {
         console.error("Error creating payout transaction ledger:", payoutTxnErr);
       }
 
+      // 3. Get current profile balance and update profile balance & total invested
       const { data: currentProfile } = await supabase
         .from("profiles")
         .select("portfolio_balance, total_invested")
@@ -1289,6 +1276,32 @@ export default function Dashboard() {
         }
       }
     }
+
+    // 4. Update local states (executed only on successful DB payout or if in demo mode)
+    setBaseAmount(prev => {
+      const newBal = prev + totalPayout;
+      localStorage.setItem("portfolioBalance", newBal.toString());
+      return newBal;
+    });
+
+    setTotalInvested(prev => {
+      const newInvested = Math.max(0, prev - cost);
+      localStorage.setItem("totalInvested", newInvested.toString());
+      return newInvested;
+    });
+
+    setActiveInvestmentPlan(null);
+    setActivePlanInvestedAmount(0);
+    setInvestmentTimeRemaining(0);
+
+    localStorage.removeItem("activeInvestmentPlan");
+    localStorage.removeItem("activePlanInvestedAmount");
+    localStorage.removeItem("activePlanDuration");
+    localStorage.removeItem("premiumInvestedAmount");
+    localStorage.removeItem("diamondDuration");
+    localStorage.removeItem("premiumDuration");
+    localStorage.removeItem("investmentEndTime");
+
 
     // Append yield payout activity
     setActivities(prev => {
@@ -1342,7 +1355,7 @@ export default function Dashboard() {
         }
       }
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, activeInvestmentPlan]);
 
   // Scheduler / Payout tick effect
   useEffect(() => {
