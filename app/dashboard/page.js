@@ -234,6 +234,7 @@ export default function Dashboard() {
   const [selectedPlanDurations, setSelectedPlanDurations] = useState({}); // { [planId]: duration }
   const [selectedPlanAmounts, setSelectedPlanAmounts] = useState({}); // { [planId]: amount }
   const [activeInvestmentPlan, setActiveInvestmentPlan] = useState(null); // stores active plan ID
+  const [activePlanDuration, setActivePlanDuration] = useState("1 month"); // stores duration of active plan
   const [activePlanInvestedAmount, setActivePlanInvestedAmount] = useState(0);
   const [topUpAmountInput, setTopUpAmountInput] = useState("");
   const [investmentTimeRemaining, setInvestmentTimeRemaining] = useState(0);
@@ -479,6 +480,7 @@ export default function Dashboard() {
           const remainingSeconds = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
           
           setActiveInvestmentPlan(planId);
+          setActivePlanDuration(duration);
           setActivePlanInvestedAmount(investedAmount);
           setInvestmentTimeRemaining(remainingSeconds);
           
@@ -488,6 +490,7 @@ export default function Dashboard() {
           localStorage.setItem("investmentEndTime", endTime.toString());
         } else {
           setActiveInvestmentPlan(null);
+          setActivePlanDuration("1 month");
           setActivePlanInvestedAmount(0);
           setInvestmentTimeRemaining(0);
           
@@ -547,9 +550,11 @@ export default function Dashboard() {
     if (storedActivePlan) {
       setActiveInvestmentPlan(storedActivePlan);
       setActivePlanInvestedAmount(parseFloat(localStorage.getItem("activePlanInvestedAmount") || "0"));
+      setActivePlanDuration(localStorage.getItem("activePlanDuration") || "1 month");
     } else {
       setActiveInvestmentPlan(null);
       setActivePlanInvestedAmount(0);
+      setActivePlanDuration("1 month");
     }
   }, [isLoggedIn]);
 
@@ -1110,6 +1115,7 @@ export default function Dashboard() {
     setBaseAmount(newBalance);
     setTotalInvested(newTotalInvested);
     setActiveInvestmentPlan(plan.id);
+    setActivePlanDuration(duration);
     setActivePlanInvestedAmount(cost);
     localStorage.setItem("portfolioBalance", newBalance.toString());
     localStorage.setItem("totalInvested", newTotalInvested.toString());
@@ -1291,6 +1297,7 @@ export default function Dashboard() {
     });
 
     setActiveInvestmentPlan(null);
+    setActivePlanDuration("1 month");
     setActivePlanInvestedAmount(0);
     setInvestmentTimeRemaining(0);
 
@@ -1397,6 +1404,7 @@ export default function Dashboard() {
     setBaseAmount(newBalance);
     setTotalInvested(newTotalInvested);
     setActiveInvestmentPlan(null);
+    setActivePlanDuration("1 month");
     setActivePlanInvestedAmount(0);
     setInvestmentTimeRemaining(0);
 
@@ -1736,9 +1744,10 @@ export default function Dashboard() {
 
   const activePlanObj = dynamicPlans.find(p => p.id === activeInvestmentPlan);
   const activeROI = activePlanObj ? (parseFloat(activePlanObj.roi) / 100) : (activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.25 : 0.00);
-  const profit = totalInvested * activeROI;
+  const mult = getDurationMultiplier(activePlanDuration || "1 month");
+  const profit = totalInvested * activeROI * mult;
   const portfolioValue = baseAmount;
-  const todaysEarningsPercent = activePlanObj ? activePlanObj.roi.replace('%', '') : (activeROI * 100).toFixed(0);
+  const todaysEarningsPercent = (activeROI * mult * 100).toFixed(2);
   const currentInvestmentPlanDisplay = activeInvestmentPlan 
     ? (activePlanObj?.name || (activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan")) 
     : (PLAN_LABELS[selectedPlan] || "Premium Investor");
