@@ -1737,7 +1737,7 @@ export default function Dashboard() {
   const activePlanObj = dynamicPlans.find(p => p.id === activeInvestmentPlan);
   const activeROI = activePlanObj ? (parseFloat(activePlanObj.roi) / 100) : (activeInvestmentPlan === "diamond" ? 0.20 : activeInvestmentPlan === "premium" ? 0.25 : 0.00);
   const profit = totalInvested * activeROI;
-  const portfolioValue = Math.max(0, totalDeposits - totalWithdrawals - pendingWithdrawal + profit);
+  const portfolioValue = baseAmount;
   const todaysEarningsPercent = activePlanObj ? activePlanObj.roi.replace('%', '') : (activeROI * 100).toFixed(0);
   const currentInvestmentPlanDisplay = activeInvestmentPlan 
     ? (activePlanObj?.name || (activeInvestmentPlan === "diamond" ? "Diamond Plan" : "Premium Plan")) 
@@ -1746,41 +1746,36 @@ export default function Dashboard() {
   // Dynamic chart multipliers and scaling
   const getDynamicChartData = () => {
     const numPoints = getTimelineLabels().length;
-    const activeWithdrawals = totalWithdrawals + pendingWithdrawal;
-
     const sData = [];
+    
+    // Chart starts at totalDeposits (or 0 if none) and ends exactly at baseAmount (available cash)
+    const startVal = totalDeposits > 0 ? totalDeposits : 0;
+    const endVal = baseAmount;
+
     for (let i = 0; i < numPoints; i++) {
-      if (i === 0) {
-        // The chart always starts from $0
-        sData.push(0);
-      } else {
-        const fraction = numPoints > 1 ? i / (numPoints - 1) : 1;
-        
-        // Deposits occur/ramp up quickly early on
-        const depositContribution = totalDeposits * Math.min(1.0, fraction * 1.5);
-        
-        // Profits accrue quadratically as time goes on
-        const profitContribution = profit * Math.pow(fraction, 2);
-        
-        // Withdrawals happen later in the timeline (after the 40% mark)
-        const withdrawalContribution = activeWithdrawals * Math.max(0.0, (fraction - 0.4) / 0.6);
-        
-        // Current value for this point on the timeline
-        const val = Math.max(0, depositContribution + profitContribution - withdrawalContribution);
-        sData.push(val);
-      }
+      const fraction = numPoints > 1 ? i / (numPoints - 1) : 1.0;
+      
+      // Interpolate between startVal and endVal
+      const baseVal = startVal + (endVal - startVal) * fraction;
+      
+      // Add a deterministic wave/fluctuation pattern so the line is wavy,
+      // but ensure fluctuation is 0 at start (fraction = 0) and end (fraction = 1).
+      const fluctuationScale = Math.max(startVal, endVal) * 0.03; // max 3% fluctuation
+      const fluctuation = Math.sin(fraction * Math.PI * 3.5) * Math.sin(fraction * Math.PI) * fluctuationScale;
+      
+      sData.push(Math.max(0, baseVal + fluctuation));
     }
 
     const yMin = 0; // Always start scaling from $0
     const yMax = Math.max(10, ...sData) * 1.15; // 15% padding above max value
 
-    // Calculate overall percentage trend text
+    // Calculate overall percentage trend text based on baseAmount vs totalDeposits
     let trendPercent = "0.0%";
     if (totalDeposits > 0) {
-      const netGrowth = portfolioValue - totalDeposits;
+      const netGrowth = baseAmount - totalDeposits;
       const rate = netGrowth / totalDeposits;
       trendPercent = `${rate >= 0 ? "+" : ""}${(rate * 100).toFixed(1)}%`;
-    } else if (portfolioValue > 0) {
+    } else if (baseAmount > 0) {
       trendPercent = "+100.0%";
     }
 
